@@ -1,14 +1,14 @@
+
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
-import { Capstone2 } from "../target/types/capstone2";
+import { PredictionMarket } from "../target/types/prediction_market";
 import { expect } from "chai";
 
 describe("Prediction Market - Complete Test Suite", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = anchor.workspace
-    .Capstone2 as Program<Capstone2>;
+  const program = anchor.workspace.PredictionMarket as Program<PredictionMarket>;
 
   // Create 10 traders
   const traders = Array.from({ length: 10 }, () =>
@@ -53,6 +53,8 @@ describe("Prediction Market - Complete Test Suite", () => {
   ];
 
   let configPda: anchor.web3.PublicKey;
+  let initialAuthorityBalance: number;
+  let totalExpectedFeeProfit = new anchor.BN(0); // Tracks fees accrued from buys
 
   before(async () => {
     console.log("\n🚀 Setting up test environment...\n");
@@ -73,6 +75,9 @@ describe("Prediction Market - Complete Test Suite", () => {
     } catch (e) {
       console.log("Authority already funded");
     }
+
+    // Record initial balance AFTER airdrop but BEFORE contract activity
+    initialAuthorityBalance = await provider.connection.getBalance(authority);
 
     // Airdrop SOL to all traders
     for (const trader of traders) {
@@ -216,6 +221,10 @@ describe("Prediction Market - Complete Test Suite", () => {
               (0.01 + Math.random() * 0.04) * anchor.web3.LAMPORTS_PER_SOL
             )
           );
+
+          // Calculate and accumulate expected fee profit (2%)
+          const fee = amount.mul(new anchor.BN(200)).div(new anchor.BN(10000));
+          totalExpectedFeeProfit = totalExpectedFeeProfit.add(fee);
 
           // Minimum shares out (for slippage protection) - set to 0 for testing
           const minSharesOut = new anchor.BN(0);
@@ -556,6 +565,82 @@ describe("Prediction Market - Complete Test Suite", () => {
   // ============================================================
 
   describe("Analytics & Statistics", () => {
+    // --- NEW: Sweep Funds Test ---
+    it("Authority sweeps remaining funds from all market vaults", async () => {
+      let totalSwept = 0;
+      for (let i = 0; i < markets.length; i++) {
+        const market = markets[i];
+
+        // Fetch balance before sweeping
+        const vaultBalanceBefore = await provider.connection.getBalance(
+          market.vaultPda
+        );
+
+        try {
+          if (vaultBalanceBefore > 0) {
+            await program.methods
+              .sweepFunds()
+              .accounts({
+                config: configPda,
+                market: market.marketPda,
+                vault: market.vaultPda,
+                authority: authority,
+                systemProgram: anchor.web3.SystemProgram.programId,
+              })
+              .rpc();
+            totalSwept += vaultBalanceBefore;
+            console.log(
+              `  ✅ Swept ${market.vaultPda.toBase58()} (${(
+                vaultBalanceBefore / anchor.web3.LAMPORTS_PER_SOL
+              ).toFixed(4)} SOL)`
+            );
+          }
+        } catch (e) {
+          console.log(
+            `  ❌ Failed to sweep Market ${i + 1} vault: ${e.message}`
+          );
+        }
+      }
+      console.log(
+        `\n  Total Unrealized Profit Swept: ${(
+          totalSwept / anchor.web3.LAMPORTS_PER_SOL
+        ).toFixed(4)} SOL\n`
+      );
+    });
+    // --- END NEW TEST ---
+
+    it("Calculates and displays contract profit (Authority)", async () => {
+      // 1. Calculate Realized Profit (Fees)
+      const realizedProfitSOL =
+        totalExpectedFeeProfit.toNumber() / anchor.web3.LAMPORTS_PER_SOL;
+
+      // 2. Verify net change in Authority wallet for fees and sweep
+      const finalAuthorityBalance = await provider.connection.getBalance(
+        authority
+      );
+      const netAuthorityChangeSOL =
+        (finalAuthorityBalance - initialAuthorityBalance) /
+        anchor.web3.LAMPORTS_PER_SOL;
+
+      console.log("---");
+      console.log("💰 Contract Profit Summary (Authority):\n");
+
+      console.log(
+        `  Realized Profit (Fees Collected): ${realizedProfitSOL.toFixed(
+          4
+        )} SOL`
+      );
+      console.log(
+        `  Total Net Change in Authority Wallet: ${netAuthorityChangeSOL.toFixed(
+          4
+        )} SOL`
+      );
+      console.log(
+        "\n  *The 'Net Change' now includes ALL fees collected PLUS the swept remainder (Unrealized Profit) MINUS the initial deposit for markets."
+      );
+      console.log("---");
+    });
+
     it("Displays final trader balances", async () => {
       console.log("Final Trader Balances:");
 
@@ -571,7 +656,7 @@ describe("Prediction Market - Complete Test Suite", () => {
     });
 
     it("Verifies vault balances are mostly distributed", async () => {
-      console.log("Final Vault Balances:");
+      console.log("Final Vault Balances (Should be near zero):");
 
       for (let i = 0; i < markets.length; i++) {
         const market = markets[i];

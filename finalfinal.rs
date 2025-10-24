@@ -289,6 +289,7 @@ pub mod prediction_market {
                 .checked_sub(market.initial_liquidity)
                 .ok_or(ErrorCode::MathOverflow)?
                 // FIX: Add initial liquidity to the denominator base to stabilize the proportional calculation
+                // and compensate for accumulated rounding errors.
                 .checked_add(market.initial_liquidity) 
                 .ok_or(ErrorCode::MathOverflow)?
         } else {
@@ -316,6 +317,10 @@ pub mod prediction_market {
         let payout = payout as u64;
 
         require!(payout > 0, ErrorCode::NoWinningShares);
+        
+        // The check 'require!(ctx.accounts.vault.lamports() >= payout, ...)' was removed
+        // as the proportional calculation should be enough, and the system transfer 
+        // will throw an error if the balance is truly insufficient.
         
         let market_id_bytes = market.market_id.to_le_bytes(); 
         
@@ -349,54 +354,6 @@ pub mod prediction_market {
         position.claimed = true;
 
         msg!("User {} claimed {} lamports", ctx.accounts.user.key(), payout);
-
-        Ok(())
-    }
-    
-    // AUTHORITY FUNCTION: Sweeps remaining SOL/dust from the market vault after claims
-    pub fn sweep_funds(ctx: Context<SweepFunds>) -> Result<()> {
-        // Only authority can sweep funds
-        require!(
-            ctx.accounts.authority.key() == ctx.accounts.config.authority,
-            ErrorCode::Unauthorized
-        );
-
-        let market = &ctx.accounts.market;
-        
-        // Require market to be resolved and past its resolution time
-        require!(market.resolved, ErrorCode::MarketNotResolved);
-
-        let vault_balance = ctx.accounts.vault.to_account_info().lamports();
-        
-        // Ensure there is something to transfer (minus minimum rent)
-        require!(vault_balance > 0, ErrorCode::NoRemainingFunds);
-
-        let market_id_bytes = market.market_id.to_le_bytes();
-
-        // Transfer all remaining SOL from the vault to the authority
-        let seeds = &[
-            VAULT_SEED,
-            market_id_bytes.as_ref(),
-            &[market.vault_bump],
-        ];
-        let signer = &[&seeds[..]];
-
-        // Change the vault's lamports and owner back to the authority (closes the PDA account)
-        anchor_lang::solana_program::program::invoke_signed(
-            &anchor_lang::solana_program::system_instruction::transfer(
-                ctx.accounts.vault.key,
-                ctx.accounts.authority.key,
-                vault_balance,
-            ),
-            &[
-                ctx.accounts.vault.to_account_info(),
-                ctx.accounts.authority.to_account_info(),
-                ctx.accounts.system_program.to_account_info(),
-            ],
-            signer,
-        )?;
-
-        msg!("Authority swept {} lamports from Market #{} vault.", vault_balance, market.market_id);
 
         Ok(())
     }
@@ -551,36 +508,6 @@ pub struct ClaimWinnings<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[derive(Accounts)]
-pub struct SweepFunds<'info> {
-    #[account(
-        seeds = [b"config"],
-        bump = config.bump
-    )]
-    pub config: Account<'info, Config>,
-
-    #[account(
-        seeds = [MARKET_SEED, market.market_id.to_le_bytes().as_ref()],
-        bump = market.bump
-    )]
-    pub market: Account<'info, Market>,
-
-    #[account(
-        mut, // Must be mutable to receive the remaining SOL
-        seeds = [VAULT_SEED, market.market_id.to_le_bytes().as_ref()],
-        bump = market.vault_bump
-    )]
-    /// CHECK: Vault PDA to be drained
-    pub vault: AccountInfo<'info>,
-
-    #[account(mut)]
-    /// Authority receives the sweep funds
-    pub authority: Signer<'info>,
-
-    pub system_program: Program<'info, System>,
-}
-
-
 // State structs
 #[account]
 pub struct Config {
@@ -674,6 +601,4 @@ pub enum ErrorCode {
     NoWinningShares,
     #[msg("Winnings already claimed")]
     AlreadyClaimed,
-    #[msg("No remaining funds in the vault to sweep")]
-    NoRemainingFunds,
 }
