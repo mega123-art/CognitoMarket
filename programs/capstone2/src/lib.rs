@@ -284,22 +284,18 @@ pub mod prediction_market {
         // Calculate total shares issued for the winning side. This value is used as the 
         // denominator for proportional payout.
         let total_winning_shares = if outcome_yes {
-            // YES wins: Shares are based on the magnitude of change in NO liquidity.
-            market.no_liquidity
-                .checked_sub(market.initial_liquidity)
-                .ok_or(ErrorCode::MathOverflow)?
-                // FIX: Add initial liquidity to the denominator base to stabilize the proportional calculation
-                .checked_add(market.initial_liquidity) 
-                .ok_or(ErrorCode::MathOverflow)?
-        } else {
-            // NO wins: Shares are based on the magnitude of change in YES liquidity.
-            market.initial_liquidity
-                .checked_sub(market.yes_liquidity)
-                .ok_or(ErrorCode::MathOverflow)?
-                // FIX: Add initial liquidity to the denominator base to stabilize the proportional calculation.
-                .checked_add(market.initial_liquidity) 
-                .ok_or(ErrorCode::MathOverflow)?
-        };
+    // YES wins: The amount of SOL removed from the NO pool (Y_initial - Y_current)
+    // This value represents the total YES shares issued.
+    market.initial_liquidity // Y_initial
+        .checked_sub(market.no_liquidity) // Y_current
+        .ok_or(ErrorCode::MathOverflow)?
+} else {
+    // NO wins: The amount of SOL removed from the YES pool (X_initial - X_current)
+    // This value represents the total NO shares issued.
+    market.initial_liquidity // X_initial
+        .checked_sub(market.yes_liquidity) // X_current
+        .ok_or(ErrorCode::MathOverflow)?
+};
 
         require!(total_winning_shares > 0, ErrorCode::NoWinningShares);
 

@@ -1,0 +1,114 @@
+graph TB
+    subgraph "External Systems"
+        GROQ[("Groq AI API<br/>(Mixtral-8x7b)")]
+        MONGO[("MongoDB<br/>Markets Database")]
+        USER["👤 End Users<br/>(Traders)"]
+    end
+
+    subgraph "Off-Chain Bot (Python)"
+        BOT["PredictionMarketBot<br/>Authority Keypair"]
+        BOT_GEN["Market Generation<br/>Loop"]
+        BOT_RES["Resolution Loop<br/>(2min intervals)"]
+        BOT_SWEEP["Fund Sweeping<br/>(24h after resolution)"]
+        
+        BOT --> BOT_GEN
+        BOT --> BOT_RES
+        BOT --> BOT_SWEEP
+    end
+
+    subgraph "Solana Program (3AewMi...GeGsUc)"
+        PROG["Prediction Market<br/>Program"]
+        
+        subgraph "Instructions"
+            INIT["initialize()<br/>One-time setup"]
+            CREATE["create_market()<br/>AI creates markets"]
+            BUY["buy_shares()<br/>Users trade"]
+            RESOLVE["resolve_market()<br/>AI resolves outcome"]
+            CLAIM["claim_winnings()<br/>Users claim payouts"]
+            SWEEP["sweep_funds()<br/>AI recovers dust"]
+        end
+        
+        PROG --> INIT
+        PROG --> CREATE
+        PROG --> BUY
+        PROG --> RESOLVE
+        PROG --> CLAIM
+        PROG --> SWEEP
+    end
+
+    subgraph "On-Chain Accounts"
+        subgraph "PDAs (Program-Derived Addresses)"
+            CONFIG["Config Account<br/>Seeds: ['config']<br/>---<br/>• authority: Pubkey<br/>• market_count: u64<br/>• fee_percentage: u16 (2%)<br/>• bump: u8"]
+            
+            MARKET["Market Account<br/>Seeds: ['market', market_id]<br/>---<br/>• question: String<br/>• yes_liquidity: u64<br/>• no_liquidity: u64<br/>• k_constant: u64 (AMM)<br/>• resolved: bool<br/>• outcome: Option&lt;bool&gt;"]
+            
+            VAULT["Vault PDA<br/>Seeds: ['vault', market_id]<br/>---<br/>• Holds all SOL<br/>• Controlled by program<br/>• Funds trading + payouts"]
+            
+            POSITION["UserPosition Account<br/>Seeds: ['position', user, market_id]<br/>---<br/>• yes_shares: u64<br/>• no_shares: u64<br/>• claimed: bool"]
+        end
+        
+        AUTH["Authority Account<br/>(Bot's Keypair)<br/>---<br/>• Receives fees (2%)<br/>• Seeds markets with SOL<br/>• Sweeps dust"]
+        
+        USER_ACCT["User Accounts<br/>(Signers)<br/>---<br/>• Pay for shares<br/>• Receive winnings"]
+    end
+
+    %% Flow 1: Initialization
+    BOT -->|"1. initialize()"| INIT
+    INIT -->|"Creates & stores"| CONFIG
+    AUTH -.->|"Sets as authority"| CONFIG
+
+    %% Flow 2: Market Creation
+    GROQ -->|"Generate idea"| BOT_GEN
+    BOT_GEN -->|"2. create_market()"| CREATE
+    CREATE -->|"Creates"| MARKET
+    CREATE -->|"Creates"| VAULT
+    AUTH -->|"Transfers 0.2 SOL<br/>(initial liquidity)"| VAULT
+    CONFIG -->|"Increments market_count"| CREATE
+    BOT_GEN -->|"Stores metadata"| MONGO
+
+    %% Flow 3: Trading (AMM)
+    USER -->|"3. buy_shares(is_yes, amount)"| BUY
+    USER_ACCT -->|"Transfers SOL"| BUY
+    BUY -->|"2% fee"| AUTH
+    BUY -->|"98% to pool"| VAULT
+    BUY -->|"Updates AMM state<br/>(constant product)"| MARKET
+    BUY -->|"Mints shares"| POSITION
+
+    %% Flow 4: Resolution
+    BOT_RES -->|"Query unresolved"| MONGO
+    MONGO -->|"Markets past deadline"| BOT_RES
+    GROQ -->|"Determine outcome"| BOT_RES
+    BOT_RES -->|"4. resolve_market(outcome_yes)"| RESOLVE
+    RESOLVE -->|"Sets resolved=true<br/>Sets outcome"| MARKET
+    BOT_RES -->|"Update DB"| MONGO
+
+    %% Flow 5: Claiming Winnings
+    USER -->|"5. claim_winnings()"| CLAIM
+    CLAIM -->|"Reads winning side"| MARKET
+    CLAIM -->|"Reads user shares"| POSITION
+    CLAIM -->|"Calculate payout<br/>(proportional)"| CLAIM
+    VAULT -->|"Transfer winnings"| USER_ACCT
+    CLAIM -->|"Mark claimed=true"| POSITION
+
+    %% Flow 6: Fund Sweeping
+    BOT_SWEEP -->|"Query resolved markets<br/>(24h+ after resolution)"| MONGO
+    MONGO -->|"Eligible markets"| BOT_SWEEP
+    BOT_SWEEP -->|"6. sweep_funds()"| SWEEP
+    SWEEP -->|"Verifies resolved"| MARKET
+    VAULT -->|"Transfer remaining SOL"| AUTH
+    BOT_SWEEP -->|"Mark swept=true"| MONGO
+
+    %% Styling
+    classDef external fill:#e1f5ff,stroke:#0288d1,stroke-width:2px
+    classDef bot fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef program fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef instruction fill:#e8eaf6,stroke:#3f51b5,stroke-width:2px
+    classDef pda fill:#e8f5e9,stroke:#388e3c,stroke-width:3px
+    classDef account fill:#fff9c4,stroke:#f9a825,stroke-width:2px
+    
+    class GROQ,MONGO,USER external
+    class BOT,BOT_GEN,BOT_RES,BOT_SWEEP bot
+    class PROG program
+    class INIT,CREATE,BUY,RESOLVE,CLAIM,SWEEP instruction
+    class CONFIG,MARKET,VAULT,POSITION pda
+    class AUTH,USER_ACCT account
