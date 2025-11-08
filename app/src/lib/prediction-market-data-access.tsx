@@ -64,16 +64,16 @@ export function usePredictionMarket() {
   }
 
   // Get a single market by its public key (RECOMMENDED METHOD)
-  // MODIFIED: Accept PublicKey | null and use enabled flag
   const useGetMarketByPubkey = (marketPubkey: PublicKey | null) => {
     return useQuery({
       queryKey: ['prediction-market', 'market', marketPubkey?.toString(), { cluster }],
-      // MODIFIED: Removed the unused @ts-expect-error directive
       queryFn: () => {
         if (!marketPubkey) throw new Error('Market pubkey not provided')
+        // MODIFIED: Placed the ts-expect-error directive directly above the line causing the error
+        // @ts-expect-error Anchor IDL type inference issue
         return program.account.market.fetch(marketPubkey)
       },
-      enabled: !!marketPubkey, // MODIFIED: Only run query if marketPubkey is not null
+      enabled: !!marketPubkey,
     })
   }
 
