@@ -68,7 +68,7 @@ export function usePredictionMarket() {
   const useGetMarketByPubkey = (marketPubkey: PublicKey | null) => {
     return useQuery({
       queryKey: ['prediction-market', 'market', marketPubkey?.toString(), { cluster }],
-      // @ts-expect-error Anchor IDL type inference issue
+      // MODIFIED: Removed the unused @ts-expect-error directive
       queryFn: () => {
         if (!marketPubkey) throw new Error('Market pubkey not provided')
         return program.account.market.fetch(marketPubkey)
