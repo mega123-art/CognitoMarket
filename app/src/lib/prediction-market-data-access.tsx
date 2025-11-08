@@ -8,7 +8,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCluster } from '@/components/cluster/cluster-data-access'
 import { useTransactionToast } from '@/components/use-transaction-toast'
 import { BN } from '@coral-xyz/anchor'
-import { PublicKey, SystemProgram, Transaction } from '@solana/web3.js'
+import { PublicKey, SystemProgram } from '@solana/web3.js'
 import { toast } from 'sonner'
 
 // Seeds for PDA derivation
@@ -27,21 +27,12 @@ export function usePredictionMarket() {
   const { publicKey } = useWallet()
 
   // Find PDAs
-  const [configPda] = PublicKey.findProgramAddressSync(
-    [CONFIG_SEED],
-    program.programId,
-  )
+  const [configPda] = PublicKey.findProgramAddressSync([CONFIG_SEED], program.programId)
 
   const findMarketPDAs = (marketId: BN) => {
     const marketIdBytes = marketId.toArrayLike(Buffer, 'le', 8)
-    const [marketPda] = PublicKey.findProgramAddressSync(
-      [MARKET_SEED, marketIdBytes],
-      program.programId,
-    )
-    const [vaultPda] = PublicKey.findProgramAddressSync(
-      [VAULT_SEED, marketIdBytes],
-      program.programId,
-    )
+    const [marketPda] = PublicKey.findProgramAddressSync([MARKET_SEED, marketIdBytes], program.programId)
+    const [vaultPda] = PublicKey.findProgramAddressSync([VAULT_SEED, marketIdBytes], program.programId)
     return { marketPda, vaultPda }
   }
 
@@ -71,6 +62,14 @@ export function usePredictionMarket() {
     })
   }
 
+  // Get a single market by its public key (RECOMMENDED METHOD)
+  const getMarketByPubkey = (marketPubkey: PublicKey) => {
+    return useQuery({
+      queryKey: ['prediction-market', 'market', marketPubkey.toString(), { cluster }],
+      queryFn: () => program.account.market.fetch(marketPubkey),
+    })
+  }
+
   // Get all positions for the connected user
   const getUserPositions = useQuery({
     queryKey: ['prediction-market', 'user-positions', publicKey?.toBase58(), { cluster }],
@@ -90,19 +89,18 @@ export function usePredictionMarket() {
 
   // === MUTATIONS ===
 
-  // buy_shares
+  // buy_shares - Using market pubkey directly
   const buyShares = useMutation({
     mutationKey: ['prediction-market', 'buy-shares', { cluster, publicKey }],
-    mutationFn: async (input: {
-      marketId: BN
-      isYes: boolean
-      amountLamports: BN
-      minSharesOut: BN
-    }) => {
+    mutationFn: async (input: { marketPubkey: PublicKey; isYes: boolean; amountLamports: BN; minSharesOut: BN }) => {
       if (!publicKey) throw new Error('Wallet not connected')
 
-      const { marketPda, vaultPda } = findMarketPDAs(input.marketId)
-      const userPositionPda = findUserPositionPDA(input.marketId, publicKey)
+      // Fetch the market to get its marketId for deriving other PDAs
+      const market = await program.account.market.fetch(input.marketPubkey)
+      const marketId = market.marketId as BN
+
+      const { vaultPda } = findMarketPDAs(marketId)
+      const userPositionPda = findUserPositionPDA(marketId, publicKey)
 
       // We need the authority from the config account to receive fees
       const config = await program.account.config.fetch(configPda)
@@ -111,7 +109,7 @@ export function usePredictionMarket() {
         .buyShares(input.isYes, input.amountLamports, input.minSharesOut)
         .accounts({
           config: configPda,
-          market: marketPda,
+          market: input.marketPubkey, // Use the actual pubkey, not derived PDA
           vault: vaultPda,
           userPosition: userPositionPda,
           user: publicKey,
@@ -119,20 +117,22 @@ export function usePredictionMarket() {
           systemProgram: SystemProgram.programId,
         })
         .rpc()
-      return signature
+
+      // Return both signature and marketPubkey for cache invalidation
+      return { signature, marketPubkey: input.marketPubkey.toString() }
     },
-    onSuccess: (signature) => {
+    onSuccess: ({ signature, marketPubkey }) => {
       transactionToast(signature)
       // Invalidate queries to refetch data
       client.invalidateQueries({
-        queryKey: ['prediction-market', 'market', input.marketId.toString()],
+        queryKey: ['prediction-market', 'market', marketPubkey],
       })
       client.invalidateQueries({
         queryKey: ['prediction-market', 'user-positions', publicKey?.toBase58()],
       })
     },
     onError: (err) => {
-      toast.error(Transaction fail: ${err.message})
+      toast.error(`Transaction failed: ${err.message}`)
     },
   })
 
@@ -164,7 +164,7 @@ export function usePredictionMarket() {
       })
     },
     onError: (err) => {
-      toast.error(Transaction fail: ${err.message})
+      toast.error(`Transaction failed: ${err.message}`)
     },
   })
 
@@ -172,6 +172,7 @@ export function usePredictionMarket() {
     program,
     getMarkets,
     getMarket,
+    getMarketByPubkey,
     getUserPositions,
     buyShares,
     claimWinnings,

@@ -54,8 +54,8 @@ export function MarketFeature() {
               </CardContent>
               <CardFooter>
                 <Button asChild variant="outline" className="w-full">
-                  {/* ✅ Fixed syntax error here */}
-                  <Link href={`/markets/${marketAccount.marketId.toString()}`}>
+                  {/* Use the public key instead of marketId for the URL */}
+                  <Link href={`/markets/${market.publicKey.toString()}`}>
                     {isResolved ? 'View Resolution' : 'Trade'}
                   </Link>
                 </Button>

@@ -4,7 +4,21 @@ import './globals.css'
 import { AppProviders } from '@/components/app-providers'
 import { AppLayout } from '@/components/app-layout'
 import React from 'react'
+// Add at the top of the file:
+import { Geist, Geist_Mono } from 'next/font/google'
 
+const geistSans = Geist({
+  variable: '--font-geist-sans',
+  subsets: ['latin'],
+})
+
+const geistMono = Geist_Mono({
+  variable: '--font-geist-mono',
+  subsets: ['latin'],
+})
+
+// Then use in body:
+const antialiased = `${geistSans.variable} ${geistMono.variable} antialiased`
 export const metadata: Metadata = {
   title: 'Cognitomarket',
   description: 'Decentralized Prediction Markets', // Updated description

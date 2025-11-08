@@ -9,7 +9,7 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { useState } from 'react'
-import { LAMPORTS_PER_SOL } from '@solana/web3.js'
+import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { WalletButton } from '../solana/solana-provider'
 
@@ -21,17 +21,24 @@ function getPrice(yesLiquidity: bigint, noLiquidity: bigint): number {
 }
 
 export function MarketDetailFeature({ marketId }: { marketId: string }) {
-  const { getMarket, buyShares } = usePredictionMarket()
+  const { getMarketByPubkey, buyShares } = usePredictionMarket()
   const { publicKey } = useWallet()
   const [amountSol, setAmountSol] = useState('0.1')
-  const marketIdU64 = new BN(marketId)
 
-  const { data: market, isLoading } = getMarket(marketIdU64)
+  // Use the public key directly instead of deriving from marketId
+  let marketPubkey: PublicKey
+  try {
+    marketPubkey = new PublicKey(marketId)
+  } catch (e) {
+    return <div>Invalid market address</div>
+  }
+
+  const { data: market, isLoading } = getMarketByPubkey(marketPubkey)
 
   const handleBuy = (isYes: boolean) => {
     const amountLamports = new BN(parseFloat(amountSol) * LAMPORTS_PER_SOL)
     buyShares.mutateAsync({
-      marketId: marketIdU64,
+      marketPubkey: marketPubkey, // Pass the pubkey directly
       isYes,
       amountLamports,
       minSharesOut: new BN(0), // No slippage protection for this example
