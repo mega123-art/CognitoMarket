@@ -25,15 +25,17 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
   const { publicKey } = useWallet()
   const [amountSol, setAmountSol] = useState('0.1')
 
+  // FIX: Hooks must be called at the top level, not conditionally.
+  const { data: market, isLoading } = useGetMarketByPubkey(new PublicKey(marketId))
+
   // Use the public key directly instead of deriving from marketId
   let marketPubkey: PublicKey
   try {
     marketPubkey = new PublicKey(marketId)
-  } catch (e) {
+  } catch {
+    // FIX: Removed unused 'e' variable
     return <div>Invalid market address</div>
   }
-
-  const { data: market, isLoading } = useGetMarketByPubkey(marketPubkey)
 
   const handleBuy = (isYes: boolean) => {
     const amountLamports = new BN(parseFloat(amountSol) * LAMPORTS_PER_SOL)
