@@ -12,7 +12,8 @@ import { useState } from 'react'
 import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { WalletButton } from '../solana/solana-provider'
-import { cn } from '@/lib/utils' // Import cn utility
+import { cn } from '@/lib/utils'
+import { MarketPriceChart } from './market-price-chart' // MODIFIED: Import the new chart
 
 // Helper to calculate price
 function getPrice(yesLiquidity: bigint, noLiquidity: bigint): number {
@@ -55,12 +56,18 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
   const noPrice = 1 - yesPrice
   const isResolved = market.resolved
 
+  // MODIFIED: Apply dynamic style for shadow/border color
+  const priceColor = yesPrice > 0.5 ? 'var(--primary)' : yesPrice < 0.5 ? 'var(--destructive)' : 'var(--border)'
+  const cardStyle = {
+    '--border': priceColor, // This will be used by the card's border AND shadow
+  } as React.CSSProperties
+
   return (
     <div>
       <AppHero
         title={market.question}
         subtitle={
-          <div className="flex flex-col items-center">
+          <div className="flex flex-col items-center font-mono">
             <p className="text-lg">{market.description}</p>
             <span className="text-sm text-muted-foreground mt-2">
               Resolves: {new Date(Number(market.resolutionTime) * 1000).toLocaleString()}
@@ -69,21 +76,27 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
         }
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* MODIFIED: Added dynamic style for shadow/border color */}
+        <Card style={cardStyle}>
           <CardHeader>
             <CardTitle>Market Details</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="flex justify-between">
+          {/* MODIFIED: Added space-y-4 for better layout with chart */}
+          <CardContent className="space-y-4">
+            {/* MODIFIED: Added Chart Component */}
+            <div className="h-64">
+              <MarketPriceChart />
+            </div>
+            <div className="flex justify-between font-mono">
               <span className="text-muted-foreground">YES Price</span>
-              <span className="font-bold text-green-600">{(yesPrice * 100).toFixed(0)}¢</span>
+              <span className="font-bold text-primary">{(yesPrice * 100).toFixed(0)}¢</span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between font-mono">
               <span className="text-muted-foreground">NO Price</span>
-              <span className="font-bold text-red-600">{(noPrice * 100).toFixed(0)}¢</span>
+              <span className="font-bold text-destructive">{(noPrice * 100).toFixed(0)}¢</span>
             </div>
-            <div className="border-t pt-2 mt-2">
+            <div className="border-t-2 border-foreground pt-2 mt-2 font-mono space-y-2">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Volume</span>
                 <span>{(Number(market.totalVolume) / LAMPORTS_PER_SOL).toFixed(4)} SOL</span>
@@ -96,9 +109,9 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
               </div>
             </div>
             {isResolved && (
-              <div className="flex justify-between items-center pt-4 text-lg font-bold border-t mt-2">
+              <div className="flex justify-between items-center pt-4 text-lg font-bold border-t-2 border-foreground mt-2 font-mono">
                 <span className="text-muted-foreground">Outcome</span>
-                <span className={cn('text-2xl font-extrabold', market.outcome ? 'text-green-500' : 'text-red-500')}>
+                <span className={cn('text-2xl font-extrabold', market.outcome ? 'text-primary' : 'text-destructive')}>
                   {market.outcome ? 'YES' : 'NO'}
                 </span>
               </div>
@@ -106,16 +119,17 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
           </CardContent>
         </Card>
 
-        <Card>
+        {/* MODIFIED: Added dynamic style for shadow/border color */}
+        <Card style={cardStyle}>
           <CardHeader>
             <CardTitle>Trade</CardTitle>
-            <CardDescription>Buy shares for YES or NO</CardDescription>
+            <CardDescription className="font-mono">Buy shares for YES or NO</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {isResolved ? (
-              <div className="text-center font-bold text-lg space-y-2">
+              <div className="text-center font-bold text-lg space-y-2 font-mono">
                 <div>Market has resolved. Trading is closed.</div>
-                <div className={cn('text-3xl font-extrabold', market.outcome ? 'text-green-500' : 'text-red-500')}>
+                <div className={cn('text-3xl font-extrabold', market.outcome ? 'text-primary' : 'text-destructive')}>
                   Outcome: {market.outcome ? 'YES' : 'NO'}
                 </div>
               </div>
@@ -126,7 +140,9 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
             ) : (
               <>
                 <div>
-                  <Label htmlFor="amount">Amount (SOL)</Label>
+                  <Label htmlFor="amount" className="font-mono">
+                    Amount (SOL)
+                  </Label>
                   <Input
                     id="amount"
                     type="number"
@@ -134,30 +150,35 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
                     value={amountSol}
                     onChange={(e) => setAmountSol(e.target.value)}
                     disabled={buyShares.isPending}
+                    className="font-mono"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Button
                       variant="default"
-                      className="w-full bg-green-600 hover:bg-green-700"
+                      className="w-full" // Removed custom colors to use 'default' variant
                       onClick={() => handleBuy(true)}
                       disabled={buyShares.isPending}
                     >
                       {buyShares.isPending ? 'Buying...' : 'Buy YES'}
                     </Button>
-                    <div className="text-center text-xs text-muted-foreground">@ {(yesPrice * 100).toFixed(0)}¢</div>
+                    <div className="text-center text-xs text-muted-foreground font-mono">
+                      @ {(yesPrice * 100).toFixed(0)}¢
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Button
-                      variant="default"
-                      className="w-full bg-red-600 hover:bg-red-700"
+                      variant="destructive" // Use 'destructive' variant
+                      className="w-full"
                       onClick={() => handleBuy(false)}
                       disabled={buyShares.isPending}
                     >
                       {buyShares.isPending ? 'Buying...' : 'Buy NO'}
                     </Button>
-                    <div className="text-center text-xs text-muted-foreground">@ {(noPrice * 100).toFixed(0)}¢</div>
+                    <div className="text-center text-xs text-muted-foreground font-mono">
+                      @ {(noPrice * 100).toFixed(0)}¢
+                    </div>
                   </div>
                 </div>
               </>
