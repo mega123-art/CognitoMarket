@@ -1,12 +1,16 @@
 // src/app/markets/[marketId]/page.tsx
 import { MarketDetailFeature } from '@/components/prediction-market/market-detail-feature'
 
-// FIX: The PageProps constraint in Next.js is reporting a confusing
-// 'Promise<any>' error. We bypass this by typing 'params' as 'any'
-// in the function signature, which satisfies the build check.
-export default function Page({ params }: { params: any }) {
-  // We can then safely extract our marketId as a string
-  const marketId = params.marketId as string
+// Define the expected shape of the params
+interface PageParams {
+  marketId: string
+}
+
+// FIX: In Next.js 15+, 'params' is a Promise.
+// The component must be 'async' and 'params' must be 'await'ed.
+export default async function Page({ params }: { params: Promise<PageParams> }) {
+  // Await the params promise to get the resolved object
+  const { marketId } = await params
 
   // It's also good practice to handle a missing marketId
   if (!marketId) {
