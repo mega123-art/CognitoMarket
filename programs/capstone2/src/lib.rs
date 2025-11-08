@@ -235,6 +235,16 @@ pub mod prediction_market {
                 .ok_or(ErrorCode::MathOverflow)?;
         }
         // <-- END FIX -->
+        emit!(BuySharesEvent {
+            market_pubkey: market.key(), // Add market pubkey to identify which market was traded
+            market_id: market.market_id,
+            user: ctx.accounts.user.key(),
+            is_yes,
+            shares: shares_out,
+            yes_liquidity: market.yes_liquidity,
+            no_liquidity: market.no_liquidity,
+            timestamp: Clock::get()?.unix_timestamp,
+        });
 
         msg!(
             "User {} bought {} {} shares for {} lamports (fee: {})",
@@ -692,4 +702,16 @@ pub enum ErrorCode {
     AlreadyClaimed,
     #[msg("No remaining funds in the vault to sweep")]
     NoRemainingFunds,
+}
+
+#[event]
+pub struct BuySharesEvent {
+    pub market_pubkey: Pubkey,
+    pub market_id: u64,
+    pub user: Pubkey,
+    pub is_yes: bool,
+    pub shares: u64,
+    pub yes_liquidity: u64,
+    pub no_liquidity: u64,
+    pub timestamp: i64,
 }
