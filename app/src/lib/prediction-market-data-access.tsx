@@ -49,7 +49,7 @@ export function usePredictionMarket() {
   // Get all markets
   const getMarkets = useQuery({
     queryKey: ['prediction-market', 'all-markets', { cluster }],
-    // @ts-expect-error
+    // @ts-expect-error Anchor IDL type inference issue
     queryFn: () => program.account.market.all(),
   })
 
@@ -58,7 +58,7 @@ export function usePredictionMarket() {
     const { marketPda } = findMarketPDAs(marketId)
     return useQuery({
       queryKey: ['prediction-market', 'market', marketId.toString(), { cluster }],
-      // @ts-expect-error
+      // @ts-expect-error Anchor IDL type inference issue
       queryFn: () => program.account.market.fetch(marketPda),
     })
   }
@@ -67,7 +67,7 @@ export function usePredictionMarket() {
   const useGetMarketByPubkey = (marketPubkey: PublicKey) => {
     return useQuery({
       queryKey: ['prediction-market', 'market', marketPubkey.toString(), { cluster }],
-      // @ts-expect-error
+      // @ts-expect-error Anchor IDL type inference issue
       queryFn: () => program.account.market.fetch(marketPubkey),
     })
   }
@@ -77,7 +77,7 @@ export function usePredictionMarket() {
     queryKey: ['prediction-market', 'user-positions', publicKey?.toBase58(), { cluster }],
     queryFn: () => {
       if (!publicKey) throw new Error('Wallet not connected')
-      // @ts-expect-error
+      // @ts-expect-error Anchor IDL type inference issue
       return program.account.userPosition.all([
         {
           memcmp: {
@@ -99,7 +99,7 @@ export function usePredictionMarket() {
       if (!publicKey) throw new Error('Wallet not connected')
 
       // Fetch the market to get its marketId for deriving other PDAs
-      // @ts-expect-error
+      // @ts-expect-error Anchor IDL type inference issue
       const market = await program.account.market.fetch(input.marketPubkey)
       const marketId = market.marketId as BN
 
@@ -107,7 +107,7 @@ export function usePredictionMarket() {
       const userPositionPda = findUserPositionPDA(marketId, publicKey)
 
       // We need the authority from the config account to receive fees
-      // @ts-expect-error
+      // @ts-expect-error Anchor IDL type inference issue
       const config = await program.account.config.fetch(configPda)
 
       const signature = await program.methods
