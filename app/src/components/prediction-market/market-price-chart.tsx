@@ -2,13 +2,25 @@
 
 import { Card } from '@/components/ui/card'
 import React from 'react'
-// MODIFIED: Removed TooltipProps from this import
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-// MODIFIED: We will not import TooltipProps to avoid the type conflict
+// We are not importing TooltipProps to avoid type conflicts
+
+// MODIFIED: Define a specific type for the tooltip payload
+type TooltipPayload = {
+  value: number
+}
 
 // Custom Tooltip with Neobrutalism Style
-// MODIFIED: Replaced `TooltipProps<number, string>` with an inline type definition
-const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string | number }) => {
+// MODIFIED: Replaced `any[]` with our specific `TooltipPayload[]`
+const CustomTooltip = ({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean
+  payload?: TooltipPayload[]
+  label?: string | number
+}) => {
   if (active && payload?.length) {
     return (
       <Card className="bg-background border-2 border-foreground shadow-[4px_4px_0px_var(--border)] p-2">
@@ -88,24 +100,18 @@ function formatData(data: PriceHistoryPoint[]) {
   })
 }
 
-// MODIFIED: Removed unused `marketPubkey` prop
 export function MarketPriceChart() {
-  // 1. We no longer fetch data. We just format our static data.
   const chartData = React.useMemo(() => formatData(staticHistoryData), [])
-
-  // 2. We no longer need loading or error states.
-  // The chart will always have data.
 
   return (
     <div className="h-64 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart
-          // 3. Use the static data
           data={chartData}
           margin={{
             top: 5,
             right: 10,
-            left: -20, // Adjust to show Y-axis labels
+            left: -20,
             bottom: 5,
           }}
         >
