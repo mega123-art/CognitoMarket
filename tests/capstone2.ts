@@ -57,7 +57,7 @@ describe("Prediction Market - Complete Test Suite", () => {
   let totalExpectedFeeProfit = new anchor.BN(0); // Tracks fees accrued from buys
 
   before(async () => {
-    console.log("\n🚀 Setting up test environment...\n");
+    console.log("\n Setting up test environment...\n");
 
     // Derive config PDA
     [configPda] = anchor.web3.PublicKey.findProgramAddressSync(
@@ -88,7 +88,7 @@ describe("Prediction Market - Complete Test Suite", () => {
       await provider.connection.confirmTransaction(sig);
     }
 
-    console.log("✅ Airdrops completed for authority and 10 traders\n");
+    console.log(" Airdrops completed for authority and 10 traders\n");
   });
 
   // ============================================================
@@ -100,7 +100,7 @@ describe("Prediction Market - Complete Test Suite", () => {
       // Check if already initialized
       const configInfo = await provider.connection.getAccountInfo(configPda);
       if (configInfo) {
-        console.log("✅ Config already initialized");
+        console.log(" Config already initialized");
         return;
       }
 
@@ -114,9 +114,9 @@ describe("Prediction Market - Complete Test Suite", () => {
           })
           .rpc();
 
-        console.log("✅ Config initialized successfully");
+        console.log(" Config initialized successfully");
       } catch (e) {
-        console.log(`⚠️ Config initialization failed: ${e.message}`);
+        console.log(` Config initialization failed: ${e.message}`);
       }
     });
   });
@@ -175,9 +175,9 @@ describe("Prediction Market - Complete Test Suite", () => {
             })
             .rpc();
 
-          console.log(`✅ Market ${i + 1} created: ${market.question}`);
+          console.log(` Market ${i + 1} created: ${market.question}`);
         } catch (e) {
-          console.log(`❌ Failed to create market ${i + 1}: ${e.message}`);
+          console.log(` Failed to create market ${i + 1}: ${e.message}`);
           throw e;
         }
       }
@@ -262,7 +262,7 @@ describe("Prediction Market - Complete Test Suite", () => {
             }
           } catch (e) {
             console.log(
-              `  ⚠️ Trader ${traderIndex + 1} - Market ${
+              `  Trader ${traderIndex + 1} - Market ${
                 marketIndex + 1
               } failed: ${e.message}`
             );
@@ -270,7 +270,7 @@ describe("Prediction Market - Complete Test Suite", () => {
         }
       }
 
-      console.log(`\n✅ Completed ${successfulPurchases}/30 purchases\n`);
+      console.log(`\n Completed ${successfulPurchases}/30 purchases\n`);
       expect(successfulPurchases).to.be.greaterThan(0);
     });
 
@@ -298,7 +298,7 @@ describe("Prediction Market - Complete Test Suite", () => {
           expect(marketAccount.yesLiquidity.toNumber()).to.be.greaterThan(0);
           expect(marketAccount.noLiquidity.toNumber()).to.be.greaterThan(0);
         } catch (e) {
-          console.log(`  ⚠️ Market ${i + 1} not found, skipping...`);
+          console.log(`  Market ${i + 1} not found, skipping...`);
         }
       }
       console.log();
@@ -340,7 +340,7 @@ describe("Prediction Market - Complete Test Suite", () => {
             );
           }
         } catch (e) {
-          console.log(`  ⚠️ Trader ${traderIndex + 1} position not found`);
+          console.log(`  Trader ${traderIndex + 1} position not found`);
         }
       }
       console.log();
@@ -353,11 +353,11 @@ describe("Prediction Market - Complete Test Suite", () => {
 
   describe("Market Resolution", () => {
     it("Waits for market duration to pass", async () => {
-      console.log("⏳ Waiting for market duration to pass (1 minute)...");
+      console.log(" Waiting for market duration to pass (1 minute)...");
       await new Promise((resolve) =>
         setTimeout(resolve, (MARKET_DURATION + 5) * 1000)
       );
-      console.log("✅ Market duration complete\n");
+      console.log(" Market duration complete\n");
     });
 
     it("Resolves all 3 markets with correct outcomes", async () => {
@@ -375,10 +375,10 @@ describe("Prediction Market - Complete Test Suite", () => {
             .rpc();
 
           console.log(
-            `✅ Market ${i + 1} resolved: ${market.outcome ? "YES" : "NO"} wins`
+            ` Market ${i + 1} resolved: ${market.outcome ? "YES" : "NO"} wins`
           );
         } catch (e) {
-          console.log(`❌ Failed to resolve market ${i + 1}: ${e.message}`);
+          console.log(` Failed to resolve market ${i + 1}: ${e.message}`);
         }
       }
       console.log();
@@ -400,7 +400,7 @@ describe("Prediction Market - Complete Test Suite", () => {
         expect.fail("Should have thrown an error");
       } catch (error) {
         expect(error).to.exist;
-        console.log("✅ Correctly prevented double resolution\n");
+        console.log(" Correctly prevented double resolution\n");
       }
     });
   });
@@ -465,7 +465,7 @@ describe("Prediction Market - Complete Test Suite", () => {
             );
 
             console.log(
-              `  ✅ Trader ${traderIndex + 1} claimed ${winnings.toFixed(
+              `  Trader ${traderIndex + 1} claimed ${winnings.toFixed(
                 4
               )} SOL from Market ${marketIndex + 1}`
             );
@@ -475,7 +475,7 @@ describe("Prediction Market - Complete Test Suite", () => {
               !error.message.includes("AccountNotInitialized")
             ) {
               console.log(
-                `  ⚠️ Trader ${traderIndex + 1} - Market ${marketIndex + 1}: ${
+                `  Trader ${traderIndex + 1} - Market ${marketIndex + 1}: ${
                   error.message
                 }`
               );
@@ -484,7 +484,7 @@ describe("Prediction Market - Complete Test Suite", () => {
         }
       }
 
-      console.log(`\n📊 Claim Summary:`);
+      console.log(`\n Claim Summary:`);
       console.log(`   Total successful claims: ${totalWinners}`);
       console.log(
         `   Total claimed: ${(
@@ -494,7 +494,7 @@ describe("Prediction Market - Complete Test Suite", () => {
 
       if (totalWinners === 0) {
         console.log(
-          "⚠️ No claims succeeded - markets may not have been created properly"
+          " No claims succeeded - markets may not have been created properly"
         );
       }
     });
@@ -517,12 +517,12 @@ describe("Prediction Market - Complete Test Suite", () => {
           userPositionPda
         );
         if (position.claimed) {
-          console.log("✅ Winner's position correctly marked as claimed\n");
+          console.log(" Winner's position correctly marked as claimed\n");
         } else {
-          console.log("⚠️ Position not marked as claimed\n");
+          console.log(" Position not marked as claimed\n");
         }
       } catch (error) {
-        console.log("⚠️ Position account not found\n");
+        console.log(" Position account not found\n");
       }
     });
 
@@ -555,7 +555,7 @@ describe("Prediction Market - Complete Test Suite", () => {
         expect.fail("Loser should not be able to claim");
       } catch (error) {
         expect(error).to.exist;
-        console.log("✅ Correctly prevented loser from claiming\n");
+        console.log(" Correctly prevented loser from claiming\n");
       }
     });
   });
@@ -590,14 +590,14 @@ describe("Prediction Market - Complete Test Suite", () => {
               .rpc();
             totalSwept += vaultBalanceBefore;
             console.log(
-              `  ✅ Swept ${market.vaultPda.toBase58()} (${(
+              `  Swept ${market.vaultPda.toBase58()} (${(
                 vaultBalanceBefore / anchor.web3.LAMPORTS_PER_SOL
               ).toFixed(4)} SOL)`
             );
           }
         } catch (e) {
           console.log(
-            `  ❌ Failed to sweep Market ${i + 1} vault: ${e.message}`
+            `  Failed to sweep Market ${i + 1} vault: ${e.message}`
           );
         }
       }
@@ -623,7 +623,7 @@ describe("Prediction Market - Complete Test Suite", () => {
         anchor.web3.LAMPORTS_PER_SOL;
 
       console.log("---");
-      console.log("💰 Contract Profit Summary (Authority):\n");
+      console.log(" Contract Profit Summary (Authority):\n");
 
       console.log(
         `  Realized Profit (Fees Collected): ${realizedProfitSOL.toFixed(
@@ -755,7 +755,7 @@ describe("Prediction Market - Complete Test Suite", () => {
         expect.fail("Should have thrown an error");
       } catch (error) {
         expect(error).to.exist;
-        console.log("✅ Correctly prevented buying shares after market end\n");
+        console.log(" Correctly prevented buying shares after market end\n");
       }
     });
 
@@ -788,7 +788,7 @@ describe("Prediction Market - Complete Test Suite", () => {
         expect.fail("Should have thrown an error");
       } catch (error) {
         expect(error).to.exist;
-        console.log("✅ Correctly prevented double claiming\n");
+        console.log(" Correctly prevented double claiming\n");
       }
     });
 
@@ -850,7 +850,7 @@ describe("Prediction Market - Complete Test Suite", () => {
         expect.fail("Non-authority should not be able to resolve");
       } catch (error) {
         expect(error).to.exist;
-        console.log("✅ Only authority can resolve markets\n");
+        console.log(" Only authority can resolve markets\n");
       }
     });
   });
