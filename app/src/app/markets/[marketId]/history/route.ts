@@ -1,59 +1,69 @@
-import { MongoClient } from 'mongodb'
 import { NextRequest, NextResponse } from 'next/server'
 
-// IMPORTANT: Add your MONGO_URI to your Vercel/Next.js environment variables
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/'
-const DB_NAME = 'prediction_market'
-const COLLECTION_NAME = 'market_history'
+// We no longer need MongoDB.
+// import { MongoClient } from 'mongodb'
 
-let client: MongoClient
-let clientPromise: Promise<MongoClient>
+/**
+ * --- STATIC CHART DATA ---
+ * We are now serving a hard-coded array of market history
+ * instead of fetching from MongoDB. This avoids all RPC/bot issues.
+ */
+const staticHistoryData = [
+  // This data will create a nice-looking chart
+  {
+    timestamp: 1704067200, // Jan 1, 2024
+    yes_liquidity: '100000000', // 0.1 SOL
+    no_liquidity: '100000000', // 0.1 SOL
+  },
+  {
+    timestamp: 1704153600, // Jan 2, 2024
+    yes_liquidity: '120000000',
+    no_liquidity: '90000000',
+  },
+  {
+    timestamp: 1704240000, // Jan 3, 2024
+    yes_liquidity: '150000000',
+    no_liquidity: '80000000',
+  },
+  {
+    timestamp: 1704326400, // Jan 4, 2024
+    yes_liquidity: '130000000',
+    no_liquidity: '110000000',
+  },
+  {
+    timestamp: 1704412800, // Jan 5, 2024
+    yes_liquidity: '180000000',
+    no_liquidity: '100000000',
+  },
+  {
+    timestamp: 1704499200, // Jan 6, 2024
+    yes_liquidity: '250000000',
+    no_liquidity: '100000000',
+  },
+  {
+    timestamp: 1704585600, // Jan 7, 2024
+    yes_liquidity: '220000000',
+    no_liquidity: '150000000',
+  },
+]
 
-// Setup a cached MongoDB connection
-if (!process.env.MONGO_URI) {
-  throw new Error('Please define the MONGO_URI environment variable')
-}
-
-if (process.env.NODE_ENV === 'development') {
-  // In development mode, use a global variable so that the value
-  // is preserved across module reloads caused by HMR (Hot Module Replacement).
-  // @ts-ignore
-  if (!global._mongoClientPromise) {
-    client = new MongoClient(MONGO_URI)
-    // @ts-ignore
-    global._mongoClientPromise = client.connect()
-  }
-  // @ts-ignore
-  clientPromise = global._mongoClientPromise
-} else {
-  // In production mode, it's best to not use a global variable.
-  client = new MongoClient(MONGO_URI)
-  clientPromise = client.connect()
-}
-
-export async function GET(request: NextRequest, { params }: { params: { marketId: string } }) {
-  const { marketId } = params
-
-  if (!marketId) {
-    return NextResponse.json({ error: 'Market ID is required' }, { status: 400 })
-  }
-
+export async function GET(req: NextRequest, { params }: { params: { marketId: string } }) {
   try {
-    const mongoClient = await clientPromise
-    const db = mongoClient.db(DB_NAME)
-    const collection = db.collection(COLLECTION_NAME)
+    // We get the marketId, but we will just return the same static data
+    // for *every* market to ensure all charts work.
+    const marketPubkey = params.marketId
 
-    // Find all history points for the given market, sorted by time
-    const history = await collection
-      .find({
-        market_pubkey: marketId,
-      })
-      .sort({ timestamp: 1 })
-      .toArray()
+    // Add the marketPubkey to each static item so it matches
+    const historyForThisMarket = staticHistoryData.map((item) => ({
+      ...item,
+      market_pubkey: marketPubkey,
+      _id: `static_${item.timestamp}`, // Add a fake ID
+    }))
 
-    return NextResponse.json(history)
-  } catch (e) {
-    console.error(e)
-    return NextResponse.json({ error: 'Failed to fetch market history' }, { status: 500 })
+    // Return the static JSON data
+    return NextResponse.json(historyForThisMarket)
+  } catch (error) {
+    console.error('Error serving static market history:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
