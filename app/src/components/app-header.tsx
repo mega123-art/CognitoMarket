@@ -7,6 +7,7 @@ import { Menu, X } from 'lucide-react'
 import { ThemeSelect } from '@/components/theme-select'
 import { ClusterUiSelect } from './cluster/cluster-ui'
 import { WalletButton } from '@/components/solana/solana-provider'
+import { cn } from '@/lib/utils' // Import cn
 
 export function AppHeader({ links = [] }: { links: { label: string; path: string }[] }) {
   const pathname = usePathname()
@@ -17,18 +18,29 @@ export function AppHeader({ links = [] }: { links: { label: string; path: string
   }
 
   return (
-    <header className="relative z-50 px-4 py-2 bg-neutral-100 dark:bg-neutral-900 dark:text-neutral-400">
+    // MODIFIED: Applied bg-background, border-b-2, border-foreground, and a bottom shadow for neobrutalism
+    <header className="relative z-50 px-4 py-2 bg-background border-b-2 border-foreground shadow-[0px_4px_0px_var(--border)]">
       <div className="mx-auto flex justify-between items-center">
         <div className="flex items-baseline gap-4">
-          <Link className="text-xl hover:text-neutral-500 dark:hover:text-white" href="/">
+          {/* MODIFIED: Added font-bold, font-mono, and hover styles for the title */}
+          <Link
+            className="text-xl font-bold font-mono hover:bg-primary hover:text-primary-foreground px-2 -ml-2"
+            href="/"
+          >
             <span>Cognitomarket</span>
           </Link>
           <div className="hidden md:flex items-center">
             <ul className="flex gap-4 flex-nowrap items-center">
               {links.map(({ label, path }) => (
                 <li key={path}>
+                  {/* MODIFIED: Styled links to match neobrutalism active/hover states */}
                   <Link
-                    className={`hover:text-neutral-500 dark:hover:text-white ${isActive(path) ? 'text-neutral-500 dark:text-white' : ''}`}
+                    className={cn(
+                      'font-semibold font-mono px-2 py-1',
+                      isActive(path)
+                        ? 'bg-primary text-primary-foreground'
+                        : 'hover:bg-accent hover:text-accent-foreground',
+                    )}
                     href={path}
                   >
                     {label}
@@ -39,7 +51,8 @@ export function AppHeader({ links = [] }: { links: { label: string; path: string
           </div>
         </div>
 
-        <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setShowMenu(!showMenu)}>
+        {/* MODIFIED: Changed variant to "outline" to match other brutalist buttons */}
+        <Button variant="outline" size="icon" className="md:hidden" onClick={() => setShowMenu(!showMenu)}>
           {showMenu ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </Button>
 
@@ -49,14 +62,22 @@ export function AppHeader({ links = [] }: { links: { label: string; path: string
           <ThemeSelect />
         </div>
 
+        {/* MODIFIED: Replaced transparent/blur background with solid bg-background and border */}
         {showMenu && (
-          <div className="md:hidden fixed inset-x-0 top-[52px] bottom-0 bg-neutral-100/95 dark:bg-neutral-900/95 backdrop-blur-sm">
-            <div className="flex flex-col p-4 gap-4 border-t dark:border-neutral-800">
+          <div className="md:hidden fixed inset-x-0 top-[54px] bottom-0 bg-background border-t-2 border-foreground">
+            {/* MODIFIED: Removed redundant border class */}
+            <div className="flex flex-col p-4 gap-4">
               <ul className="flex flex-col gap-4">
                 {links.map(({ label, path }) => (
                   <li key={path}>
+                    {/* MODIFIED: Styled mobile links to match neobrutalism active/hover states */}
                     <Link
-                      className={`hover:text-neutral-500 dark:hover:text-white block text-lg py-2  ${isActive(path) ? 'text-neutral-500 dark:text-white' : ''} `}
+                      className={cn(
+                        'font-semibold font-mono block text-lg py-2 px-2',
+                        isActive(path)
+                          ? 'bg-primary text-primary-foreground'
+                          : 'hover:bg-accent hover:text-accent-foreground',
+                      )}
                       href={path}
                       onClick={() => setShowMenu(false)}
                     >
