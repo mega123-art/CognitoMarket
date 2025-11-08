@@ -540,49 +540,83 @@ Be objective and base your decision on verifiable facts. If you cannot determine
                 
     # --- Event Listener ---
     
+    # --- FIX: Corrected parser for string liquidity ---
     def _parse_buy_shares_event(self, log_data: str):
         """
         Parses the base64 data from an Anchor event log.
-        BuySharesEvent structure: (from programs/capstone2/src/lib.rs)
-        - market_pubkey: Pubkey (32 bytes)
-        - market_id: u64 (8 bytes)
-        - user: Pubkey (32 bytes)
-        - is_yes: bool (1 byte)
-        - shares: u64 (8 bytes)
-        - yes_liquidity: u64 (8 bytes)
-        - no_liquidity: u64 (8 bytes)
-        - timestamp: i64 (8 bytes)
-        Total: 32 + 8 + 32 + 1 + 8 + 8 + 8 + 8 = 105 bytes
+        Event: BuySharesEvent (from programs/capstone2/src/lib.rs)
+        - market_pubkey: Pubkey (32)
+        - market_id: u64 (8)
+        - user: Pubkey (32)
+        - is_yes: bool (1)
+        - shares: u64 (8)
+        - yes_liquidity: String
+        - no_liquidity: String
+        - timestamp: i64 (8)
         """
         try:
             # Anchor event data is base64
             data = base64.b64decode(log_data)
             
             # Skip 8-byte discriminator
-            if len(data) != (105 + 8):
-                print(f"Warning: Unexpected event data length. Got {len(data)}, expected 113")
-                return None
-                
             data_body = data[8:]
             
-            # Unpack: 32s Q 32s B Q Q Q q
-            unpacked = struct.unpack('<32sQ32sBQQQq', data_body)
+            offset = 0
+            
+            # 1. market_pubkey (32 bytes)
+            market_pubkey_bytes = data_body[offset:offset+32]
+            market_pubkey = str(Pubkey(market_pubkey_bytes))
+            offset += 32
+            
+            # 2. market_id (8 bytes, u64)
+            market_id = struct.unpack_from('<Q', data_body, offset)[0]
+            offset += 8
+            
+            # 3. user (32 bytes)
+            user_bytes = data_body[offset:offset+32]
+            user = str(Pubkey(user_bytes))
+            offset += 32
+            
+            # 4. is_yes (1 byte, bool)
+            is_yes = bool(struct.unpack_from('<B', data_body, offset)[0])
+            offset += 1
+            
+            # 5. shares (8 bytes, u64)
+            shares = struct.unpack_from('<Q', data_body, offset)[0]
+            offset += 8
+            
+            # 6. yes_liquidity (String)
+            yes_len = struct.unpack_from('<I', data_body, offset)[0]
+            offset += 4
+            yes_liquidity = data_body[offset:offset+yes_len].decode('utf-8')
+            offset += yes_len
+            
+            # 7. no_liquidity (String)
+            no_len = struct.unpack_from('<I', data_body, offset)[0]
+            offset += 4
+            no_liquidity = data_body[offset:offset+no_len].decode('utf-8')
+            offset += no_len
+            
+            # 8. timestamp (8 bytes, i64)
+            timestamp = struct.unpack_from('<q', data_body, offset)[0]
+            offset += 8
             
             return {
-                "market_pubkey": str(Pubkey(unpacked[0])),
-                "market_id": unpacked[1],
-                "user": str(Pubkey(unpacked[2])),
-                "is_yes": bool(unpacked[3]),
-                "shares": unpacked[4],
-                "yes_liquidity": str(unpacked[5]), # Store as string to preserve u64
-                "no_liquidity": str(unpacked[6]), # Store as string
-                "timestamp": unpacked[7],
+                "market_pubkey": market_pubkey,
+                "market_id": market_id,
+                "user": user,
+                "is_yes": is_yes,
+                "shares": shares,
+                "yes_liquidity": yes_liquidity, # Now a string
+                "no_liquidity": no_liquidity, # Now a string
+                "timestamp": timestamp,
             }
         except Exception as e:
-            print(f"Failed to parse BuySharesEvent: {e} | Log data: {log_data}")
+            # Add a print here to see the error
+            print(f"!!! FAILED TO PARSE BuySharesEvent: {e} | Log data: {log_data}")
             return None
+    # --- END FIX ---
 
-    # ---FIX: Corrected event listener logic---
     async def run_event_listener(self):
         """Listens for program logs and indexes BuySharesEvent"""
         print(f"\n Starting event listener for program: {self.program_id}")
@@ -595,54 +629,63 @@ Be objective and base your decision on verifiable facts. If you cannot determine
                         commitment=Confirmed
                     )
                     
-                    async for msg in websocket:
-                        if not isinstance(msg, list) or len(msg) == 0:
+                    # The async for loop yields a LIST of messages
+                    async for msg_list in websocket: 
+                        
+                        if not isinstance(msg_list, list) or len(msg_list) == 0:
                             continue
                         
-                        notification = msg[0]
+                        # Iterate through the list (usually just one item)
+                        for notification in msg_list:
+                            
+                            # Check if it's the initial subscription confirmation
+                            if hasattr(notification, 'result') and isinstance(notification.result, int):
+                                subscription_id = notification.result
+                                print(f"  Successfully subscribed to logs with ID: {subscription_id}")
+                        
+                            # Check if it's a log data notification
+                            elif hasattr(notification, 'result'): 
+                                logs_data = notification.result
+                                if not logs_data or not hasattr(logs_data, 'value'):
+                                    continue
+                                
+                                logs = logs_data.value.logs
+                                
+                                # Flag to see if we found the event
+                                found_event = False
+                                for log in logs:
+                                    # This is the log we are looking for!
+                                    if log.startswith("Program data: "):
+                                        found_event = True # We found it!
+                                        log_data = log.split("Program data: ")[1]
+                                        
+                                        # Check if it's the BuySharesEvent
+                                        if log_data.startswith(EVENT_DISCRIMINATOR_BUY_SHARES):
+                                            event_data = self._parse_buy_shares_event(log_data)
+                                            if event_data:
+                                                # This is the log you want to see
+                                                print(f"  EVENT FOUND: User {event_data['user']} bought shares for market {event_data['market_pubkey']}")
+                                                
+                                                # Save to history collection
+                                                self.history_collection.insert_one({
+                                                    "market_pubkey": event_data["market_pubkey"],
+                                                    "timestamp": event_data["timestamp"],
+                                                    "yes_liquidity": event_data["yes_liquidity"],
+                                                    "no_liquidity": event_data["no_liquidity"],
+                                                })
+                                
+                                # If we processed all logs and found no event, print a warning.
+                                if not found_event:
+                                    print(f"  Logs received for tx, but no 'Program data:' event found (RPC node may be stripping events).")
 
-                        # Check if it's a log data notification
-                        if hasattr(notification, 'method') and notification.method == 'logsNotification':
-                            if not notification.params:
-                                continue
-                            
-                            logs_data = notification.params.result
-                            if not logs_data or not hasattr(logs_data, 'value'):
-                                continue
-                            
-                            logs = logs_data.value.logs
-                            
-                            for log in logs:
-                                if log.startswith("Program data: "):
-                                    log_data = log.split("Program data: ")[1]
-                                    
-                                    if log_data.startswith(EVENT_DISCRIMINATOR_BUY_SHARES):
-                                        event_data = self._parse_buy_shares_event(log_data)
-                                        if event_data:
-                                            print(f"  Event: User {event_data['user']} bought {event_data['shares']} {'YES' if event_data['is_yes'] else 'NO'} shares for market {event_data['market_pubkey']}")
-                                            
-                                            # Save to history collection
-                                            self.history_collection.insert_one({
-                                                "market_pubkey": event_data["market_pubkey"],
-                                                "timestamp": event_data["timestamp"],
-                                                "yes_liquidity": event_data["yes_liquidity"],
-                                                "no_liquidity": event_data["no_liquidity"],
-                                            })
-                        
-                        # Check if it's the initial subscription confirmation
-                        elif hasattr(notification, 'result') and isinstance(notification.result, int):
-                            subscription_id = notification.result
-                            print(f"  Successfully subscribed to logs with ID: {subscription_id}")
-                        
-                        else:
-                            # Other message type, just log it
-                            print(f"  Received unknown websocket message: {notification}")
+                            else:
+                                # Other message type, just log it
+                                print(f"  Received unknown websocket message type: {notification}")
                                         
             except Exception as e:
                 print(f"Event listener WebSocket error: {e}")
                 print("Restarting listener in 10 seconds...")
                 await asyncio.sleep(10)
-    # --- END FIX ---
 
     async def run_resolution_loop(self):
         """Continuously check for markets to resolve/sweep"""
