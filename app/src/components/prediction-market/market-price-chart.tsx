@@ -1,6 +1,6 @@
 'use client'
 
-import { Card, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card' // MODIFIED: Removed CardContent
 // import { useQuery } from '@tanstack/react-query' // No longer needed
 import React from 'react'
 import { Line, LineChart, ResponsiveContainer, Tooltip, TooltipProps, XAxis, YAxis } from 'recharts'
@@ -86,7 +86,8 @@ function formatData(data: PriceHistoryPoint[]) {
   })
 }
 
-export function MarketPriceChart({ marketPubkey }: { marketPubkey: string }) {
+// MODIFIED: Removed unused `marketPubkey` prop
+export function MarketPriceChart() {
   // 1. We no longer fetch data. We just format our static data.
   const chartData = React.useMemo(() => formatData(staticHistoryData), [])
 
@@ -161,5 +162,3 @@ export function MarketPriceChart({ marketPubkey }: { marketPubkey: string }) {
     </div>
   )
 }
-
-// NOTE: The extra '}' at the end has been removed.

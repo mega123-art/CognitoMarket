@@ -64,11 +64,16 @@ export function usePredictionMarket() {
   }
 
   // Get a single market by its public key (RECOMMENDED METHOD)
-  const useGetMarketByPubkey = (marketPubkey: PublicKey) => {
+  // MODIFIED: Accept PublicKey | null and use enabled flag
+  const useGetMarketByPubkey = (marketPubkey: PublicKey | null) => {
     return useQuery({
-      queryKey: ['prediction-market', 'market', marketPubkey.toString(), { cluster }],
+      queryKey: ['prediction-market', 'market', marketPubkey?.toString(), { cluster }],
       // @ts-expect-error Anchor IDL type inference issue
-      queryFn: () => program.account.market.fetch(marketPubkey),
+      queryFn: () => {
+        if (!marketPubkey) throw new Error('Market pubkey not provided')
+        return program.account.market.fetch(marketPubkey)
+      },
+      enabled: !!marketPubkey, // MODIFIED: Only run query if marketPubkey is not null
     })
   }
 

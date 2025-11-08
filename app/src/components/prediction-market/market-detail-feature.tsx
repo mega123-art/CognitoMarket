@@ -8,7 +8,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
-import { useState } from 'react'
+import { useMemo, useState } from 'react' // MODIFIED: Import useMemo
 import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { WalletButton } from '../solana/solana-provider'
@@ -27,17 +27,21 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
   const { publicKey } = useWallet()
   const [amountSol, setAmountSol] = useState('0.1')
 
-  let marketPubkey: PublicKey
-  try {
-    marketPubkey = new PublicKey(marketId)
-  } catch {
-    return <div>Invalid market address</div>
-  }
+  // FIX: Safely parse the marketId using useMemo at the top level
+  const marketPubkey = useMemo(() => {
+    try {
+      return new PublicKey(marketId)
+    } catch {
+      return null
+    }
+  }, [marketId])
 
-  // FIX: Hooks must be called at the top level
+  // FIX: Call the hook unconditionally.
+  // We will modify useGetMarketByPubkey to handle a null key.
   const { data: market, isLoading } = useGetMarketByPubkey(marketPubkey)
 
   const handleBuy = (isYes: boolean) => {
+    if (!marketPubkey) return // Should not happen if we check below
     const amountLamports = new BN(parseFloat(amountSol) * LAMPORTS_PER_SOL)
     buyShares.mutateAsync({
       marketPubkey: marketPubkey,
@@ -45,6 +49,11 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
       amountLamports,
       minSharesOut: new BN(0),
     })
+  }
+
+  // FIX: Perform conditional returns *after* all hooks have been called
+  if (!marketPubkey) {
+    return <div>Invalid market address</div>
   }
 
   if (isLoading) return <div>Loading market...</div>
@@ -82,9 +91,9 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
           </CardHeader>
           {/* MODIFIED: Added space-y-4 for better layout with chart */}
           <CardContent className="space-y-4">
-            {/* MODIFIED: Added Chart Component AND passed marketPubkey */}
+            {/* MODIFIED: Added Chart Component AND removed marketPubkey prop */}
             <div className="h-64">
-              <MarketPriceChart marketPubkey={marketPubkey.toString()} />
+              <MarketPriceChart />
             </div>
             <div className="flex justify-between font-mono">
               <span className="text-muted-foreground">YES Price</span>
