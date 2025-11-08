@@ -4,6 +4,7 @@ import asyncio
 import base58
 import base64
 import struct
+# import websockets # <-- No longer needed
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict
 from dotenv import load_dotenv
@@ -18,13 +19,15 @@ from solders.hash import Hash
 from solana.rpc.async_api import AsyncClient
 from solana.rpc.commitment import Confirmed
 from solana.rpc import types as rpc_types
+# We WILL now use the solana-py websocket client
 from solana.rpc.websocket_api import connect
 from solders.rpc.config import RpcTransactionLogsFilterMentions
 
 load_dotenv()
 
-# --- Configuration ---
+# --- Configuration (MEDIUM TEST) ---
 SOLANA_RPC_URL = os.getenv("SOLANA_RPC_URL", "https://api.devnet.solana.com")
+# --- IMPORTANT: This URL must be your QuickNode WSS endpoint ---
 SOLANA_WS_URL = os.getenv("SOLANA_WS_URL", "wss://api.devnet.solana.com")
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
@@ -32,12 +35,12 @@ PRIVATE_KEY_BYTES = os.getenv("PRIVATE_KEY_BYTES")  # Comma-separated byte array
 PROGRAM_ID_STR = "3AewMiJK7RdtsQAsMbY4vk2d4b8Uksfvrr95v2xeGsUc"
 SYSTEM_PROGRAM_ID = Pubkey.from_string("11111111111111111111111111111111")
 
-# Market creation parameters
+# Market creation parameters (MEDIUM TEST)
 INITIAL_LIQUIDITY_SOL = 0.1  # 0.1 SOL per market
-MARKET_DURATION_HOURS = 24  # Markets last 24 hours
-CHECK_INTERVAL_SECONDS = 120  # Check every 2 minutes for resolution/sweep
-MARKET_CREATION_INTERVAL_HOURS = 6  # Create a new market every 6 hours
-SWEEP_GRACE_PERIOD_HOURS = 24 # Wait 24h after resolution to sweep funds
+MARKET_DURATION_MINUTES = 30  # Market lasts 30 minutes
+CHECK_INTERVAL_SECONDS = 60  # Check every 60 seconds
+MARKET_CREATION_INTERVAL_MINUTES = 15 # Create a new market every 15 minutes
+SWEEP_GRACE_PERIOD_MINUTES = 10 # Wait 10 mins after resolution to sweep
 
 # --- Anchor Instruction Discriminators (from IDL) ---
 DISCRIMINATORS = {
@@ -92,9 +95,13 @@ class PredictionMarketBot:
         self.program_id = Pubkey.from_string(PROGRAM_ID_STR)
         
         print(f" Bot initialized with authority: {self.authority_pubkey}")
-        print(f" Initial liquidity per market: {INITIAL_LIQUIDITY_SOL} SOL")
-        print(f"  Market creation interval: {MARKET_CREATION_INTERVAL_HOURS} hours")
-        print(f" Sweep grace period: {SWEEP_GRACE_PERIOD_HOURS} hours")
+        print(f" --- MEDIUM TEST CONFIGURATION ---")
+        print(f" Market duration: {MARKET_DURATION_MINUTES} minutes")
+        print(f" Market creation interval: {MARKET_CREATION_INTERVAL_MINUTES} minutes")
+        print(f" Resolution check interval: {CHECK_INTERVAL_SECONDS} seconds")
+        print(f" Sweep grace period: {SWEEP_GRACE_PERIOD_MINUTES} minutes")
+        print(f" -------------------------------")
+
 
     def _load_keypair(self) -> Keypair:
         raw = PRIVATE_KEY_BYTES
@@ -235,19 +242,33 @@ class PredictionMarketBot:
     def generate_market_idea(self) -> Optional[Dict]:
         """Use Groq AI to generate a prediction market idea"""
         try:
-            prompt = """Generate a single interesting prediction market question about current events, technology, sports, or culture.
+            prompt = """You are an expert creator of prediction market questions. Your goal is to generate a single, high-quality, objectively resolvable market.
 
-Return ONLY a JSON object with this exact structure (no markdown, no extra text):
+**CRITICAL REQUIREMENTS:**
+1.  **Objectively Resolvable:** The question MUST be a binary (YES/NO) question that can be answered with a verifiable fact, statistic, or event. There should be zero ambiguity.
+2.  **Specific Resolution Criteria:** The 'description' must clearly state HOW the market will be resolved (e.g., "Resolution will be based on the official press release from Company X by date Y," or "Based on the closing price on exchange Z at time T.").
+3.  **Timely:** The question should be about a current or near-future event.
+
+**--- EXAMPLES ---**
+* **GOOD (Verifiable):** "Will 'Dune: Part Three' be officially announced with a 2027 release date by December 31, 2025?"
+* **BAD (Subjective):** "Will 'Dune: Part Three' be a good movie?"
+* **GOOD (Specific):** "Will the closing price of Bitcoin (BTC) on Coinbase be above $70,000.00 USD at 23:59 UTC on November 15, 2025?"
+* **BAD (Vague):** "Will Bitcoin go up a lot soon?"
+* **GOOD (Specific):** "Will the US Federal Reserve lower the Federal Funds Rate at their December 2025 FOMC meeting?"
+* **BAD (Vague):** "Will the economy improve next year?"
+**--- END EXAMPLES ---**
+
+Generate a new market question about technology, finance, sports, or global events.
+
+Return ONLY a raw JSON object with this exact structure. Do not include markdown (```json) or any other text.
 {
     "question": "A clear yes/no question under 200 characters",
-    "description": "Detailed context and resolution criteria under 1000 characters",
-    "category": "One of: Technology, Sports, Politics, Entertainment, Science, Business"
-}
-
-Make the question specific, timely, and objectively resolvable."""
+    "description": "Detailed context and unambiguous resolution criteria under 1000 characters",
+    "category": "One of: Technology, Finance, Sports, Politics, Entertainment"
+}"""
 
             response = self.groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="llama-3.3-70b-versatile", # Using your specified model
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.8,
                 max_tokens=500
@@ -281,7 +302,9 @@ Make the question specific, timely, and objectively resolvable."""
             
             market_id = config_account.market_count
             
-            resolution_time = int((datetime.now(timezone.utc) + timedelta(hours=MARKET_DURATION_HOURS)).timestamp())
+            # --- MODIFIED FOR MEDIUM TEST ---
+            resolution_time = int((datetime.now(timezone.utc) + timedelta(minutes=MARKET_DURATION_MINUTES)).timestamp())
+            # --- END MODIFICATION ---
             
             initial_liquidity = int(INITIAL_LIQUIDITY_SOL * 1_000_000_000)
             
@@ -353,13 +376,15 @@ Make the question specific, timely, and objectively resolvable."""
             return
         
         print(f" Question: {market_data['question']}")
-        print(f"  Category: {market_data['category']}")
+        print(f"   Category: {market_data['category']}")
         
         market_id = await self.create_market_onchain(market_data)
         if market_id is None:
             return
         
-        resolution_time = int((datetime.now(timezone.utc) + timedelta(hours=MARKET_DURATION_HOURS)).timestamp())
+        # --- MODIFIED FOR MEDIUM TEST ---
+        resolution_time = int((datetime.now(timezone.utc) + timedelta(minutes=MARKET_DURATION_MINUTES)).timestamp())
+        # --- END MODIFICATION ---
         await self.store_market_in_db(market_id, market_data, resolution_time)
         
         print(f" Market #{market_id} fully created!\n")
@@ -398,9 +423,9 @@ Be objective and base your decision on verifiable facts. If you cannot determine
             
             resolution = json.loads(content)
             
-            if resolution.get("confidence", 0) < 0.6:
-                print(f"  Low confidence ({resolution['confidence']}) - skipping resolution")
-                return None
+            # --- CONFIDENCE CHECK REMOVED FOR TESTING ---
+            print(f"   AI confidence was: {resolution.get('confidence', 'N/A')}. Resolving anyway.")
+            # --- END REMOVAL ---
             
             return resolution
             
@@ -470,7 +495,7 @@ Be objective and base your decision on verifiable facts. If you cannot determine
 
         except Exception as e:
             if "No remaining funds" in str(e) or "6016" in str(e):
-                print(f"  No funds to sweep in Market #{market_id}.")
+                print(f"   No funds to sweep in Market #{market_id}.")
                 return True
             
             print(f" On-chain sweep error for Market #{market_id}: {e}")
@@ -489,17 +514,16 @@ Be objective and base your decision on verifiable facts. If you cannot determine
         
         for market in markets_to_resolve:
             print(f"\n Market #{market['market_id']} ready for resolution")
-            print(f"  Question: {market['question']}")
+            print(f"   Question: {market['question']}")
             
             resolution = self.resolve_market_with_ai(market)
             if not resolution:
-                print(f"  Skipped (unable to resolve)")
+                print(f"   Skipped (AI error)")
                 continue
             
             outcome_yes = resolution["outcome"]
-            print(f"  Outcome: {'YES' if outcome_yes else 'NO'}")
-            print(f"  Confidence: {resolution['confidence']:.2%}")
-            print(f"  Reasoning: {resolution['reasoning']}")
+            print(f"   Outcome: {'YES' if outcome_yes else 'NO'}")
+            print(f"   Reasoning: {resolution['reasoning']}")
             
             success = await self.resolve_market_onchain(market["market_id"], outcome_yes)
             
@@ -515,10 +539,12 @@ Be objective and base your decision on verifiable facts. If you cannot determine
                         }
                     }
                 )
-                print(f"  Resolution complete!")
+                print(f"   Resolution complete!")
 
         # --- 2. Sweep Funds ---
-        sweep_cutoff = current_time - timedelta(hours=SWEEP_GRACE_PERIOD_HOURS)
+        # --- MODIFIED FOR MEDIUM TEST ---
+        sweep_cutoff = current_time - timedelta(minutes=SWEEP_GRACE_PERIOD_MINUTES)
+        # --- END MODIFICATION ---
         
         markets_to_sweep = self.markets_collection.find({
             "resolved": True,
@@ -536,11 +562,11 @@ Be objective and base your decision on verifiable facts. If you cannot determine
                     {"market_id": market["market_id"]},
                     {"$set": {"swept": True}}
                 )
-                print(f"  Sweep complete!")
+                print(f"   Sweep complete!")
                 
     # --- Event Listener ---
     
-    # --- FIX: Corrected parser for string liquidity ---
+    # --- PARSER FIX: This is the corrected parser (u64 liquidity) ---
     def _parse_buy_shares_event(self, log_data: str):
         """
         Parses the base64 data from an Anchor event log.
@@ -550,8 +576,8 @@ Be objective and base your decision on verifiable facts. If you cannot determine
         - user: Pubkey (32)
         - is_yes: bool (1)
         - shares: u64 (8)
-        - yes_liquidity: String
-        - no_liquidity: String
+        - yes_liquidity: u64 (8)  <-- CORRECTED
+        - no_liquidity: u64 (8)   <-- CORRECTED
         - timestamp: i64 (8)
         """
         try:
@@ -585,17 +611,13 @@ Be objective and base your decision on verifiable facts. If you cannot determine
             shares = struct.unpack_from('<Q', data_body, offset)[0]
             offset += 8
             
-            # 6. yes_liquidity (String)
-            yes_len = struct.unpack_from('<I', data_body, offset)[0]
-            offset += 4
-            yes_liquidity = data_body[offset:offset+yes_len].decode('utf-8')
-            offset += yes_len
+            # 6. yes_liquidity (8 bytes, u64) <-- FIX
+            yes_liquidity = struct.unpack_from('<Q', data_body, offset)[0]
+            offset += 8
             
-            # 7. no_liquidity (String)
-            no_len = struct.unpack_from('<I', data_body, offset)[0]
-            offset += 4
-            no_liquidity = data_body[offset:offset+no_len].decode('utf-8')
-            offset += no_len
+            # 7. no_liquidity (8 bytes, u64) <-- FIX
+            no_liquidity = struct.unpack_from('<Q', data_body, offset)[0]
+            offset += 8
             
             # 8. timestamp (8 bytes, i64)
             timestamp = struct.unpack_from('<q', data_body, offset)[0]
@@ -607,56 +629,67 @@ Be objective and base your decision on verifiable facts. If you cannot determine
                 "user": user,
                 "is_yes": is_yes,
                 "shares": shares,
-                "yes_liquidity": yes_liquidity, # Now a string
-                "no_liquidity": no_liquidity, # Now a string
+                "yes_liquidity": str(yes_liquidity), # Convert to string for JSON/Mongo
+                "no_liquidity": str(no_liquidity), # Convert to string for JSON/Mongo
                 "timestamp": timestamp,
             }
         except Exception as e:
             # Add a print here to see the error
             print(f"!!! FAILED TO PARSE BuySharesEvent: {e} | Log data: {log_data}")
             return None
-    # --- END FIX ---
+    # --- END PARSER FIX ---
 
+    # --- FINAL LISTENER FIX (v3): Correctly access solders response ---
     async def run_event_listener(self):
-        """Listens for program logs and indexes BuySharesEvent"""
+        """Listens for program logs using standard logs_subscribe."""
         print(f"\n Starting event listener for program: {self.program_id}")
         
         while True: # Auto-restart loop
             try:
+                # Use the solana-py connect function with the WSS URL from .env
+                # This will work with QuickNode
                 async with connect(SOLANA_WS_URL) as websocket:
+                    
+                    # Subscribe to logs mentioning the program ID
                     await websocket.logs_subscribe(
                         RpcTransactionLogsFilterMentions(self.program_id),
                         commitment=Confirmed
                     )
                     
-                    # The async for loop yields a LIST of messages
-                    async for msg_list in websocket: 
-                        
-                        if not isinstance(msg_list, list) or len(msg_list) == 0:
-                            continue
-                        
-                        # Iterate through the list (usually just one item)
-                        for notification in msg_list:
+                    # Get the subscription confirmation
+                    first_resp_list = await websocket.recv()
+                    
+                    # FIX: Get the first item from the list
+                    if not first_resp_list:
+                        raise Exception("No response from websocket subscribe")
+                    
+                    subscription_id = first_resp_list[0].result
+                    print(f"   Successfully subscribed to logs with ID: {subscription_id}")
+                    
+                    # FIX: Start a new loop to continuously receive messages
+                    while True:
+                        try:
+                            # Wait for new messages
+                            msg_list = await websocket.recv()
                             
-                            # Check if it's the initial subscription confirmation
-                            if hasattr(notification, 'result') and isinstance(notification.result, int):
-                                subscription_id = notification.result
-                                print(f"  Successfully subscribed to logs with ID: {subscription_id}")
-                        
-                            # Check if it's a log data notification
-                            elif hasattr(notification, 'result'): 
-                                logs_data = notification.result
-                                if not logs_data or not hasattr(logs_data, 'value'):
+                            # Iterate over the list of messages received
+                            for msg_raw in msg_list:
+                                
+                                # --- THIS IS THE FIX ---
+                                # Check for log notifications
+                                # The object is msg_raw.result.value.logs
+                                if not msg_raw or not hasattr(msg_raw, 'result') or not msg_raw.result or not hasattr(msg_raw.result, 'value'):
                                     continue
                                 
-                                logs = logs_data.value.logs
+                                logs = msg_raw.result.value.logs
+                                # --- END FIX ---
+
+                                if not logs:
+                                    continue
                                 
-                                # Flag to see if we found the event
                                 found_event = False
                                 for log in logs:
-                                    # This is the log we are looking for!
                                     if log.startswith("Program data: "):
-                                        found_event = True # We found it!
                                         log_data = log.split("Program data: ")[1]
                                         
                                         # Check if it's the BuySharesEvent
@@ -664,7 +697,7 @@ Be objective and base your decision on verifiable facts. If you cannot determine
                                             event_data = self._parse_buy_shares_event(log_data)
                                             if event_data:
                                                 # This is the log you want to see
-                                                print(f"  EVENT FOUND: User {event_data['user']} bought shares for market {event_data['market_pubkey']}")
+                                                print(f"   EVENT FOUND: User {event_data['user']} bought shares for market {event_data['market_pubkey']}")
                                                 
                                                 # Save to history collection
                                                 self.history_collection.insert_one({
@@ -673,19 +706,21 @@ Be objective and base your decision on verifiable facts. If you cannot determine
                                                     "yes_liquidity": event_data["yes_liquidity"],
                                                     "no_liquidity": event_data["no_liquidity"],
                                                 })
+                                                found_event = True
+                                                break # Found the event, no need to check other logs
                                 
-                                # If we processed all logs and found no event, print a warning.
                                 if not found_event:
-                                    print(f"  Logs received for tx, but no 'Program data:' event found (RPC node may be stripping events).")
+                                    pass # Normal transaction, just not the one we want
 
-                            else:
-                                # Other message type, just log it
-                                print(f"  Received unknown websocket message type: {notification}")
-                                        
+                        except Exception as e:
+                            # Don't crash the whole listener for one bad message
+                            print(f"   Error processing message: {e}")
+
             except Exception as e:
                 print(f"Event listener WebSocket error: {e}")
                 print("Restarting listener in 10 seconds...")
                 await asyncio.sleep(10)
+    # --- END LISTENER FIX ---
 
     async def run_resolution_loop(self):
         """Continuously check for markets to resolve/sweep"""
@@ -701,7 +736,7 @@ Be objective and base your decision on verifiable facts. If you cannot determine
 
     async def run_market_creation_loop(self):
         """Continuously create new markets on a schedule"""
-        print(f" Starting market creation loop (creating every {MARKET_CREATION_INTERVAL_HOURS}h)...\n")
+        print(f" Starting market creation loop (creating every {MARKET_CREATION_INTERVAL_MINUTES}m)...\n")
         
         while True:
             try:
@@ -709,8 +744,10 @@ Be objective and base your decision on verifiable facts. If you cannot determine
             except Exception as e:
                 print(f" Market creation loop error: {e}")
             
-            wait_seconds = MARKET_CREATION_INTERVAL_HOURS * 3600
-            print(f" Next market will be created in {MARKET_CREATION_INTERVAL_HOURS} hours...\n")
+            # --- MODIFIED FOR MEDIUM TEST ---
+            wait_seconds = MARKET_CREATION_INTERVAL_MINUTES * 60
+            print(f" Next market will be created in {MARKET_CREATION_INTERVAL_MINUTES} minutes...\n")
+            # --- END MODIFICATION ---
             await asyncio.sleep(wait_seconds)
 
     async def run(self):
@@ -719,8 +756,12 @@ Be objective and base your decision on verifiable facts. If you cannot determine
         
         await self.initialize_program()
         
-        print(" Creating initial market...")
-        await self.create_new_market()
+        # --- Still creating 3 initial markets ---
+        print(" Creating 3 initial markets for testing...")
+        for i in range(3):
+            print(f"--- Creating initial market {i+1}/3 ---")
+            await self.create_new_market()
+        # --- END MODIFICATION ---
         
         print("\n Starting background loops...")
         resolution_task = asyncio.create_task(self.run_resolution_loop())
