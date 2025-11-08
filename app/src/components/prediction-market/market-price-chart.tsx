@@ -1,12 +1,14 @@
 'use client'
 
-import { Card } from '@/components/ui/card' // MODIFIED: Removed CardContent
-// import { useQuery } from '@tanstack/react-query' // No longer needed
+import { Card } from '@/components/ui/card'
 import React from 'react'
-import { Line, LineChart, ResponsiveContainer, Tooltip, TooltipProps, XAxis, YAxis } from 'recharts'
+// MODIFIED: Removed TooltipProps from this import
+import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+// MODIFIED: We will not import TooltipProps to avoid the type conflict
 
 // Custom Tooltip with Neobrutalism Style
-const CustomTooltip = ({ active, payload, label }: TooltipProps<number, string>) => {
+// MODIFIED: Replaced `TooltipProps<number, string>` with an inline type definition
+const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string | number }) => {
   if (active && payload?.length) {
     return (
       <Card className="bg-background border-2 border-foreground shadow-[4px_4px_0px_var(--border)] p-2">
