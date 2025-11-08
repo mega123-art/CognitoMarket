@@ -27,22 +27,32 @@ export function MarketFeature() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {getMarkets.data?.map((market: { account: any; publicKey: { toString: () => Key | null | undefined } }) => {
-          const marketAccount = market.account as any // Cast to any to access IDL fields
-          const price = getPrice(marketAccount.yesLiquidity, marketAccount.noLiquidity)
+          const marketAccount = market.account as any
+          const yesPrice = getPrice(marketAccount.yesLiquidity, marketAccount.noLiquidity)
+          const noPrice = 1 - yesPrice
           const isResolved = marketAccount.resolved
 
           return (
             <Card key={market.publicKey.toString()} className="flex flex-col justify-between">
               <CardHeader>
-                <CardTitle className="flex justify-between items-center">
-                  <span>{marketAccount.question}</span>
-                  <span
-                    className={`text-lg font-bold ${
-                      isResolved ? 'text-gray-500' : price > 0.5 ? 'text-green-500' : 'text-red-500'
-                    }`}
-                  >
-                    {isResolved ? (marketAccount.outcome ? 'YES' : 'NO') : `${(price * 100).toFixed(0)}%`}
-                  </span>
+                <CardTitle className="flex justify-between items-start gap-2">
+                  <span className="flex-1">{marketAccount.question}</span>
+                  {isResolved ? (
+                    <span className="text-lg font-bold text-gray-500 shrink-0">
+                      {marketAccount.outcome ? 'YES' : 'NO'}
+                    </span>
+                  ) : (
+                    <div className="flex flex-col items-end shrink-0">
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground">YES</span>
+                        <span className="text-lg font-bold text-green-500">{(yesPrice * 100).toFixed(0)}¢</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground">NO</span>
+                        <span className="text-lg font-bold text-red-500">{(noPrice * 100).toFixed(0)}¢</span>
+                      </div>
+                    </div>
+                  )}
                 </CardTitle>
                 <CardDescription>{marketAccount.category}</CardDescription>
               </CardHeader>
@@ -54,7 +64,6 @@ export function MarketFeature() {
               </CardContent>
               <CardFooter>
                 <Button asChild variant="outline" className="w-full">
-                  {/* Use the public key instead of marketId for the URL */}
                   <Link href={`/markets/${market.publicKey.toString()}`}>
                     {isResolved ? 'View Resolution' : 'Trade'}
                   </Link>

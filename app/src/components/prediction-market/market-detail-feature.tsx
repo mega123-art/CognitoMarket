@@ -38,17 +38,18 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
   const handleBuy = (isYes: boolean) => {
     const amountLamports = new BN(parseFloat(amountSol) * LAMPORTS_PER_SOL)
     buyShares.mutateAsync({
-      marketPubkey: marketPubkey, // Pass the pubkey directly
+      marketPubkey: marketPubkey,
       isYes,
       amountLamports,
-      minSharesOut: new BN(0), // No slippage protection for this example
+      minSharesOut: new BN(0),
     })
   }
 
   if (isLoading) return <div>Loading market...</div>
   if (!market) return <div>Market not found</div>
 
-  const price = getPrice(market.yesLiquidity, market.noLiquidity)
+  const yesPrice = getPrice(market.yesLiquidity, market.noLiquidity)
+  const noPrice = 1 - yesPrice
   const isResolved = market.resolved
 
   return (
@@ -72,21 +73,27 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Price</span>
-              <span className="font-bold">{(price * 100).toFixed(0)}¢</span>
+              <span className="text-muted-foreground">YES Price</span>
+              <span className="font-bold text-green-600">{(yesPrice * 100).toFixed(0)}¢</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Volume</span>
-              <span>{(Number(market.totalVolume) / LAMPORTS_PER_SOL).toFixed(4)} SOL</span>
+              <span className="text-muted-foreground">NO Price</span>
+              <span className="font-bold text-red-600">{(noPrice * 100).toFixed(0)}¢</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Liquidity</span>
-              <span>
-                {((Number(market.yesLiquidity) + Number(market.noLiquidity)) / LAMPORTS_PER_SOL).toFixed(4)} SOL
-              </span>
+            <div className="border-t pt-2 mt-2">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Volume</span>
+                <span>{(Number(market.totalVolume) / LAMPORTS_PER_SOL).toFixed(4)} SOL</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Liquidity</span>
+                <span>
+                  {((Number(market.yesLiquidity) + Number(market.noLiquidity)) / LAMPORTS_PER_SOL).toFixed(4)} SOL
+                </span>
+              </div>
             </div>
             {isResolved && (
-              <div className="flex justify-between pt-4 text-lg font-bold">
+              <div className="flex justify-between pt-4 text-lg font-bold border-t mt-2">
                 <span className="text-muted-foreground">Outcome</span>
                 <span>{market.outcome ? 'YES' : 'NO'}</span>
               </div>
@@ -120,22 +127,28 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    variant="default"
-                    className="bg-green-600 hover:bg-green-700"
-                    onClick={() => handleBuy(true)}
-                    disabled={buyShares.isPending}
-                  >
-                    {buyShares.isPending ? 'Buying...' : 'Buy YES'}
-                  </Button>
-                  <Button
-                    variant="default"
-                    className="bg-red-600 hover:bg-red-700"
-                    onClick={() => handleBuy(false)}
-                    disabled={buyShares.isPending}
-                  >
-                    {buyShares.isPending ? 'Buying...' : 'Buy NO'}
-                  </Button>
+                  <div className="space-y-2">
+                    <Button
+                      variant="default"
+                      className="w-full bg-green-600 hover:bg-green-700"
+                      onClick={() => handleBuy(true)}
+                      disabled={buyShares.isPending}
+                    >
+                      {buyShares.isPending ? 'Buying...' : 'Buy YES'}
+                    </Button>
+                    <div className="text-center text-xs text-muted-foreground">@ {(yesPrice * 100).toFixed(0)}¢</div>
+                  </div>
+                  <div className="space-y-2">
+                    <Button
+                      variant="default"
+                      className="w-full bg-red-600 hover:bg-red-700"
+                      onClick={() => handleBuy(false)}
+                      disabled={buyShares.isPending}
+                    >
+                      {buyShares.isPending ? 'Buying...' : 'Buy NO'}
+                    </Button>
+                    <div className="text-center text-xs text-muted-foreground">@ {(noPrice * 100).toFixed(0)}¢</div>
+                  </div>
                 </div>
               </>
             )}
