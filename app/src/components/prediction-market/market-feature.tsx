@@ -6,7 +6,6 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import Link from 'next/link'
 import { Button } from '../ui/button'
 import { AppHero } from '../app-hero'
-// FIX: Removed 'PublicKey' as it was unused
 import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { Key } from 'react'
 
@@ -15,6 +14,26 @@ function getPrice(yesLiquidity: bigint, noLiquidity: bigint): number {
   if (yesLiquidity === 0n || noLiquidity === 0n) return 0.5
   const price = Number(yesLiquidity) / (Number(yesLiquidity) + Number(noLiquidity))
   return price
+}
+
+// FIX: Define a type for the market account to avoid 'any'
+interface MarketAccount {
+  question: string
+  description: string
+  category: string
+  yesLiquidity: bigint
+  noLiquidity: bigint
+  totalVolume: bigint
+  resolved: boolean
+  outcome: boolean | null
+}
+
+// FIX: Define a type for the market prop
+interface MarketProp {
+  account: MarketAccount
+  publicKey: {
+    toString: () => Key | null | undefined
+  }
 }
 
 export function MarketFeature() {
@@ -27,8 +46,12 @@ export function MarketFeature() {
       {getMarkets.isError && <div className="alert alert-error">Error loading markets: {getMarkets.error.message}</div>}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {getMarkets.data?.map((market: { account: any; publicKey: { toString: () => Key | null | undefined } }) => {
-          const marketAccount = market.account as any
+        {/* FIX: Use the specific MarketProp type */}
+        {getMarkets.data?.map((market: MarketProp) => {
+          {
+            /* FIX: Remove 'as any' since the type is now correct */
+          }
+          const marketAccount = market.account
           const yesPrice = getPrice(marketAccount.yesLiquidity, marketAccount.noLiquidity)
           const noPrice = 1 - yesPrice
           const isResolved = marketAccount.resolved
