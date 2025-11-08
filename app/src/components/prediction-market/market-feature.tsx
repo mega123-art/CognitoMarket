@@ -42,11 +42,16 @@ export function MarketFeature() {
 
   return (
     <div>
-      <AppHero title="Cognitomarket" subtitle="Decentralized Prediction Markets" />
+      {/* MODIFIED: Use mono font for hero title */}
+      <AppHero
+        title={<span className="font-mono">Cognitomarket</span>}
+        subtitle={<span className="font-mono">Decentralized Prediction Markets</span>}
+      />
       {getMarkets.isLoading && <div>Loading markets...</div>}
       {getMarkets.isError && <div className="alert alert-error">Error loading markets: {getMarkets.error.message}</div>}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* MODIFIED: Increased gap for brutalist layout */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {/* FIX: Use the specific MarketProp type */}
         {getMarkets.data?.map((market: MarketProp) => {
           {
@@ -57,16 +62,23 @@ export function MarketFeature() {
           const noPrice = 1 - yesPrice
           const isResolved = marketAccount.resolved
 
+          // MODIFIED: Determine the border/shadow color. This overrides the CSS var
+          const priceColor = yesPrice > 0.5 ? 'var(--primary)' : yesPrice < 0.5 ? 'var(--destructive)' : 'var(--border)'
+          const cardStyle = {
+            '--border': priceColor, // This will be used by the card's border AND shadow
+          } as React.CSSProperties
+
           return (
-            <Card key={market.publicKey.toString()} className="flex flex-col justify-between">
+            // MODIFIED: Apply dynamic style for shadow/border color
+            <Card key={market.publicKey.toString()} className="flex flex-col justify-between" style={cardStyle}>
               <CardHeader>
                 <CardTitle className="flex justify-between items-start gap-2">
-                  <span className="flex-1">{marketAccount.question}</span>
+                  <span className="flex-1 text-lg">{marketAccount.question}</span>
                   {isResolved ? (
                     <span
                       className={cn(
-                        'text-2xl font-bold shrink-0',
-                        marketAccount.outcome ? 'text-green-500' : 'text-red-500',
+                        'text-4xl font-mono font-bold shrink-0', // MODIFIED: Bigger, mono font
+                        marketAccount.outcome ? 'text-primary' : 'text-destructive', // MODIFIED: Use new colors
                       )}
                     >
                       {marketAccount.outcome ? 'YES' : 'NO'}
@@ -75,20 +87,26 @@ export function MarketFeature() {
                     <div className="flex flex-col items-end shrink-0">
                       <div className="flex items-center gap-1">
                         <span className="text-xs text-muted-foreground">YES</span>
-                        <span className="text-lg font-bold text-green-500">{(yesPrice * 100).toFixed(0)}¢</span>
+                        {/* MODIFIED: Bigger, mono font, new colors */}
+                        <span className="text-3xl font-bold font-mono text-primary">
+                          {(yesPrice * 100).toFixed(0)}¢
+                        </span>
                       </div>
                       <div className="flex items-center gap-1">
                         <span className="text-xs text-muted-foreground">NO</span>
-                        <span className="text-lg font-bold text-red-500">{(noPrice * 100).toFixed(0)}¢</span>
+                        {/* MODIFIED: Bigger, mono font, new colors */}
+                        <span className="text-3xl font-bold font-mono text-destructive">
+                          {(noPrice * 100).toFixed(0)}¢
+                        </span>
                       </div>
                     </div>
                   )}
                 </CardTitle>
-                <CardDescription>{marketAccount.category}</CardDescription>
+                <CardDescription className="font-mono uppercase">{marketAccount.category}</CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground">{marketAccount.description}</p>
-                <div className="text-xs text-muted-foreground mt-2">
+                <div className="text-xs text-muted-foreground mt-2 font-mono">
                   Volume: {(Number(marketAccount.totalVolume) / LAMPORTS_PER_SOL).toFixed(2)} SOL
                 </div>
               </CardContent>
