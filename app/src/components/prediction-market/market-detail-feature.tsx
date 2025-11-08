@@ -12,6 +12,7 @@ import { useState } from 'react'
 import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { WalletButton } from '../solana/solana-provider'
+import { cn } from '@/lib/utils' // Import cn utility
 
 // Helper to calculate price
 function getPrice(yesLiquidity: bigint, noLiquidity: bigint): number {
@@ -95,9 +96,11 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
               </div>
             </div>
             {isResolved && (
-              <div className="flex justify-between pt-4 text-lg font-bold border-t mt-2">
+              <div className="flex justify-between items-center pt-4 text-lg font-bold border-t mt-2">
                 <span className="text-muted-foreground">Outcome</span>
-                <span>{market.outcome ? 'YES' : 'NO'}</span>
+                <span className={cn('text-2xl font-extrabold', market.outcome ? 'text-green-500' : 'text-red-500')}>
+                  {market.outcome ? 'YES' : 'NO'}
+                </span>
               </div>
             )}
           </CardContent>
@@ -110,7 +113,12 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
           </CardHeader>
           <CardContent className="space-y-4">
             {isResolved ? (
-              <div className="text-center font-bold text-lg">Market has resolved. Trading is closed.</div>
+              <div className="text-center font-bold text-lg space-y-2">
+                <div>Market has resolved. Trading is closed.</div>
+                <div className={cn('text-3xl font-extrabold', market.outcome ? 'text-green-500' : 'text-red-500')}>
+                  Outcome: {market.outcome ? 'YES' : 'NO'}
+                </div>
+              </div>
             ) : !publicKey ? (
               <div className="flex justify-center">
                 <WalletButton />

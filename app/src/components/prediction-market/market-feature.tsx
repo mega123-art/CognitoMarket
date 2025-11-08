@@ -8,6 +8,7 @@ import { Button } from '../ui/button'
 import { AppHero } from '../app-hero'
 import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { Key } from 'react'
+import { cn } from '@/lib/utils' // Import cn utility
 
 // Helper to calculate price
 function getPrice(yesLiquidity: bigint, noLiquidity: bigint): number {
@@ -62,7 +63,12 @@ export function MarketFeature() {
                 <CardTitle className="flex justify-between items-start gap-2">
                   <span className="flex-1">{marketAccount.question}</span>
                   {isResolved ? (
-                    <span className="text-lg font-bold text-gray-500 shrink-0">
+                    <span
+                      className={cn(
+                        'text-2xl font-bold shrink-0',
+                        marketAccount.outcome ? 'text-green-500' : 'text-red-500',
+                      )}
+                    >
                       {marketAccount.outcome ? 'YES' : 'NO'}
                     </span>
                   ) : (
