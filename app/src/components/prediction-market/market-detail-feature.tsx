@@ -13,7 +13,7 @@ import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { WalletButton } from '../solana/solana-provider'
 import { cn } from '@/lib/utils'
-import { MarketPriceChart } from './market-price-chart' // MODIFIED: Import the new chart
+import { MarketPriceChart } from './market-price-chart' // MODIFIED: Import is the same
 
 // Helper to calculate price
 function getPrice(yesLiquidity: bigint, noLiquidity: bigint): number {
@@ -27,17 +27,15 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
   const { publicKey } = useWallet()
   const [amountSol, setAmountSol] = useState('0.1')
 
-  // FIX: Hooks must be called at the top level, not conditionally.
-  const { data: market, isLoading } = useGetMarketByPubkey(new PublicKey(marketId))
-
-  // Use the public key directly instead of deriving from marketId
   let marketPubkey: PublicKey
   try {
     marketPubkey = new PublicKey(marketId)
   } catch {
-    // FIX: Removed unused 'e' variable
     return <div>Invalid market address</div>
   }
+
+  // FIX: Hooks must be called at the top level
+  const { data: market, isLoading } = useGetMarketByPubkey(marketPubkey)
 
   const handleBuy = (isYes: boolean) => {
     const amountLamports = new BN(parseFloat(amountSol) * LAMPORTS_PER_SOL)
@@ -84,9 +82,9 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
           </CardHeader>
           {/* MODIFIED: Added space-y-4 for better layout with chart */}
           <CardContent className="space-y-4">
-            {/* MODIFIED: Added Chart Component */}
+            {/* MODIFIED: Added Chart Component AND passed marketPubkey */}
             <div className="h-64">
-              <MarketPriceChart />
+              <MarketPriceChart marketPubkey={marketPubkey.toString()} />
             </div>
             <div className="flex justify-between font-mono">
               <span className="text-muted-foreground">YES Price</span>
