@@ -22,12 +22,12 @@ export function AppHeader({ links = [] }: { links: { label: string; path: string
     <header className="relative z-50 px-4 py-2 bg-background border-b-2 border-foreground shadow-[0px_4px_0px_var(--border)]">
       <div className="mx-auto flex justify-between items-center">
         <div className="flex items-baseline gap-4">
-          {/* MODIFIED: Added font-bold, font-mono, and hover styles for the title */}
+          {/* MODIFIED: Added font-bold, font-mono, and hover styles for the title. Updated text to "Cognito Market". */}
           <Link
             className="text-xl font-bold font-mono hover:bg-primary hover:text-primary-foreground px-2 -ml-2"
             href="/"
           >
-            <span>Cognitomarket</span>
+            <span>Cognito Market</span>
           </Link>
           <div className="hidden md:flex items-center">
             <ul className="flex gap-4 flex-nowrap items-center">

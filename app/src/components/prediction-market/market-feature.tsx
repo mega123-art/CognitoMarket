@@ -42,11 +42,8 @@ export function MarketFeature() {
 
   return (
     <div>
-      {/* MODIFIED: Use mono font for hero title */}
-      <AppHero
-        title={<span className="font-mono">Cognitomarket</span>}
-        subtitle={<span className="font-mono">Decentralized Prediction Markets</span>}
-      />
+      {/* MODIFIED: Pass plain strings. AppHero now handles styling. */}
+      <AppHero title="Cognito Market" subtitle="Decentralized Prediction Markets" />
       {getMarkets.isLoading && <div>Loading markets...</div>}
       {getMarkets.isError && <div className="alert alert-error">Error loading markets: {getMarkets.error.message}</div>}
 
