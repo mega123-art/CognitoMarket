@@ -9,10 +9,26 @@ import { useWallet } from '@solana/wallet-adapter-react'
 import { WalletButton } from '../solana/solana-provider'
 import { BN } from '@coral-xyz/anchor'
 import { Card, CardContent } from '../ui/card'
-import { Key } from 'react'
+import { PublicKey } from '@solana/web3.js'
+
+// Type definitions for better type safety
+interface UserPositionAccount {
+  marketId: BN
+  yesShares: number
+  noShares: number
+  claimed: boolean
+  user: PublicKey
+  bump: number
+}
+
+interface MarketAccount {
+  resolved: boolean
+  outcome: boolean | null
+  marketId: BN
+}
 
 export function MyPositionsFeature() {
-  const { getUserPositions, claimWinnings, getMarket } = usePredictionMarket()
+  const { getUserPositions } = usePredictionMarket()
   const { publicKey } = useWallet()
 
   if (!publicKey) {
@@ -47,8 +63,8 @@ export function MyPositionsFeature() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {getUserPositions.data?.map((pos: { account: any; publicKey: { toString: () => Key | null | undefined } }) => {
-                const position = pos.account as any // Cast
+              {getUserPositions.data?.map((pos: { account: UserPositionAccount; publicKey: PublicKey }) => {
+                const position = pos.account
 
                 return (
                   <TableRow key={pos.publicKey.toString()}>
@@ -71,21 +87,23 @@ export function MyPositionsFeature() {
 }
 
 // Separate component to fetch market data for the claim button
-function ClaimButton({ marketId, position }: { marketId: BN; position: any }) {
-  const { getMarket, claimWinnings } = usePredictionMarket()
-  const { data: market } = getMarket(marketId)
+function ClaimButton({ marketId, position }: { marketId: BN; position: UserPositionAccount }) {
+  const { useGetMarket, claimWinnings } = usePredictionMarket()
+  const { data: market } = useGetMarket(marketId)
+
+  const marketData = market as MarketAccount | undefined
 
   const canClaim =
-    market &&
-    market.resolved &&
+    marketData &&
+    marketData.resolved &&
     !position.claimed &&
-    ((market.outcome && position.yesShares > 0) || (!market.outcome && position.noShares > 0))
+    ((marketData.outcome && position.yesShares > 0) || (!marketData.outcome && position.noShares > 0))
 
   const handleClaim = () => {
     claimWinnings.mutateAsync({ marketId })
   }
 
-  if (!market || !market.resolved || position.claimed) {
+  if (!marketData || !marketData.resolved || position.claimed) {
     return (
       <Button variant="outline" size="sm" disabled>
         Claim

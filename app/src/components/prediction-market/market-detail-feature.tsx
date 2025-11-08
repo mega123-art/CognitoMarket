@@ -21,7 +21,7 @@ function getPrice(yesLiquidity: bigint, noLiquidity: bigint): number {
 }
 
 export function MarketDetailFeature({ marketId }: { marketId: string }) {
-  const { getMarketByPubkey, buyShares } = usePredictionMarket()
+  const { useGetMarketByPubkey, buyShares } = usePredictionMarket()
   const { publicKey } = useWallet()
   const [amountSol, setAmountSol] = useState('0.1')
 
@@ -33,7 +33,7 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
     return <div>Invalid market address</div>
   }
 
-  const { data: market, isLoading } = getMarketByPubkey(marketPubkey)
+  const { data: market, isLoading } = useGetMarketByPubkey(marketPubkey)
 
   const handleBuy = (isYes: boolean) => {
     const amountLamports = new BN(parseFloat(amountSol) * LAMPORTS_PER_SOL)

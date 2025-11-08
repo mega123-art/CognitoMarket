@@ -3,7 +3,7 @@
 
 import { useAnchorProvider } from '@/components/solana/solana-provider'
 import { getPredictionMarketProgram } from './prediction-market-program'
-import { useConnection, useWallet } from '@solana/wallet-adapter-react'
+import { useWallet } from '@solana/wallet-adapter-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCluster } from '@/components/cluster/cluster-data-access'
 import { useTransactionToast } from '@/components/use-transaction-toast'
@@ -18,7 +18,6 @@ const VAULT_SEED = Buffer.from('vault')
 const USER_POSITION_SEED = Buffer.from('position')
 
 export function usePredictionMarket() {
-  const { connection } = useConnection()
   const { cluster } = useCluster()
   const provider = useAnchorProvider()
   const program = getPredictionMarketProgram(provider)
@@ -54,7 +53,7 @@ export function usePredictionMarket() {
   })
 
   // Get a single market by its ID (which is a u64 BN)
-  const getMarket = (marketId: BN) => {
+  const useGetMarket = (marketId: BN) => {
     const { marketPda } = findMarketPDAs(marketId)
     return useQuery({
       queryKey: ['prediction-market', 'market', marketId.toString(), { cluster }],
@@ -63,7 +62,7 @@ export function usePredictionMarket() {
   }
 
   // Get a single market by its public key (RECOMMENDED METHOD)
-  const getMarketByPubkey = (marketPubkey: PublicKey) => {
+  const useGetMarketByPubkey = (marketPubkey: PublicKey) => {
     return useQuery({
       queryKey: ['prediction-market', 'market', marketPubkey.toString(), { cluster }],
       queryFn: () => program.account.market.fetch(marketPubkey),
@@ -171,8 +170,8 @@ export function usePredictionMarket() {
   return {
     program,
     getMarkets,
-    getMarket,
-    getMarketByPubkey,
+    useGetMarket,
+    useGetMarketByPubkey,
     getUserPositions,
     buyShares,
     claimWinnings,
