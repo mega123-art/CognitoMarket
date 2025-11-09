@@ -37,7 +37,7 @@ SOLANA_WS_URL = os.getenv("SOLANA_WS_URL", "wss://api.devnet.solana.com")
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 PRIVATE_KEY_BYTES = os.getenv("PRIVATE_KEY_BYTES")
-PROGRAM_ID_STR = "3AewMiJK7RdtsQAsMbY4vk2d4b8Uksfvrr95v2xeGsUc"
+PROGRAM_ID_STR = "AiCMVwVQAfKmgaLov17UJw6eo4DSCh1FiaEN226ftXa2"
 SYSTEM_PROGRAM_ID = Pubkey.from_string("11111111111111111111111111111111")
 
 # Market parameters
@@ -72,7 +72,7 @@ class PredictionMarketBot:
         self.authority_pubkey = self.keypair.pubkey()
         self.groq_client = Groq(api_key=GROQ_API_KEY)
         self.mongo_client = MongoClient(MONGO_URI)
-        self.db = self.mongo_client["prediction_market"]
+        self.db = self.mongo_client["cognitomarket"]
         self.markets_collection = self.db["markets"]
         self.history_collection = self.db["market_history"]
 
