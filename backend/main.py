@@ -1,12 +1,20 @@
+#!/usr/bin/env python3
+"""
+prediction_market_bot_final_working.py
+
+FINAL FIX: The issue is that Anchor needs the market_id as an instruction parameter
+to validate PDA seeds. We must pass market_id explicitly to resolve_market.
+"""
+
 import json
 import os
 import asyncio
 import base58
 import base64
 import struct
-# import websockets # <-- No longer needed
 from datetime import datetime, timedelta, timezone
-from typing import Optional, List, Dict
+from typing import Optional, Dict
+
 from dotenv import load_dotenv
 from groq import Groq
 from pymongo import MongoClient
@@ -15,34 +23,31 @@ from solders.pubkey import Pubkey
 from solders.instruction import Instruction, AccountMeta
 from solders.message import MessageV0
 from solders.transaction import VersionedTransaction
-from solders.hash import Hash
 from solana.rpc.async_api import AsyncClient
 from solana.rpc.commitment import Confirmed
 from solana.rpc import types as rpc_types
-# We WILL now use the solana-py websocket client
 from solana.rpc.websocket_api import connect
 from solders.rpc.config import RpcTransactionLogsFilterMentions
 
 load_dotenv()
 
-# --- Configuration (MEDIUM TEST) ---
+# --- Configuration ---
 SOLANA_RPC_URL = os.getenv("SOLANA_RPC_URL", "https://api.devnet.solana.com")
-# --- IMPORTANT: This URL must be your QuickNode WSS endpoint ---
 SOLANA_WS_URL = os.getenv("SOLANA_WS_URL", "wss://api.devnet.solana.com")
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-PRIVATE_KEY_BYTES = os.getenv("PRIVATE_KEY_BYTES")  # Comma-separated byte array or base58
+PRIVATE_KEY_BYTES = os.getenv("PRIVATE_KEY_BYTES")
 PROGRAM_ID_STR = "3AewMiJK7RdtsQAsMbY4vk2d4b8Uksfvrr95v2xeGsUc"
 SYSTEM_PROGRAM_ID = Pubkey.from_string("11111111111111111111111111111111")
 
-# Market creation parameters (MEDIUM TEST)
-INITIAL_LIQUIDITY_SOL = 0.1  # 0.1 SOL per market
-MARKET_DURATION_MINUTES = 30  # Market lasts 30 minutes
-CHECK_INTERVAL_SECONDS = 60  # Check every 60 seconds
-MARKET_CREATION_INTERVAL_MINUTES = 15 # Create a new market every 15 minutes
-SWEEP_GRACE_PERIOD_MINUTES = 10 # Wait 10 mins after resolution to sweep
+# Market parameters
+INITIAL_LIQUIDITY_SOL = 0.1
+MARKET_DURATION_MINUTES = 30
+CHECK_INTERVAL_SECONDS = 60
+MARKET_CREATION_INTERVAL_MINUTES = 15
+SWEEP_GRACE_PERIOD_MINUTES = 10
 
-# --- Anchor Instruction Discriminators (from IDL) ---
+# Anchor Instruction Discriminators
 DISCRIMINATORS = {
     "initialize": bytes([175, 175, 109, 31, 13, 152, 155, 237]),
     "create_market": bytes([103, 226, 97, 235, 200, 188, 251, 254]),
@@ -50,13 +55,10 @@ DISCRIMINATORS = {
     "sweep_funds": bytes([150, 235, 156, 105, 133, 142, 200, 162]),
 }
 
-# Anchor Event Discriminator for 'BuySharesEvent'
-# sha256("event:BuySharesEvent")[..8]
-EVENT_DISCRIMINATOR_BUY_SHARES = "S+S9q8iA99U="  # Base64 of bytes: [75, 235, 75, 171, 200, 128, 247, 84]
+MARKET_DISCRIMINATOR = bytes([219, 190, 213, 55, 0, 227, 198, 154])
+EVENT_DISCRIMINATOR_BUY_SHARES = "S+S9q8iA99U="
 
-# --- Helper Classes ---
 class ConfigAccount:
-    """Helper class to hold deserialized Config account data."""
     def __init__(self, authority: Pubkey, market_count: int, fee_percentage: int, bump: int):
         self.authority = authority
         self.market_count = market_count
@@ -65,43 +67,26 @@ class ConfigAccount:
 
 class PredictionMarketBot:
     def __init__(self):
-        # Initialize Solana connection
         self.connection = AsyncClient(SOLANA_RPC_URL)
-        
-        # Load keypair from environment
         self.keypair = self._load_keypair()
         self.authority_pubkey = self.keypair.pubkey()
-        
-        # Initialize Groq client
         self.groq_client = Groq(api_key=GROQ_API_KEY)
-        
-        # Initialize MongoDB
         self.mongo_client = MongoClient(MONGO_URI)
         self.db = self.mongo_client["prediction_market"]
         self.markets_collection = self.db["markets"]
-        
-        # NEW: Collection for chart history
         self.history_collection = self.db["market_history"]
-        
+
         self.markets_collection.create_index("market_id", unique=True)
         self.markets_collection.create_index("resolution_time")
         self.markets_collection.create_index("resolved")
-        self.markets_collection.create_index("swept")
-        
-        # NEW: Indexes for history collection
         self.history_collection.create_index("market_pubkey")
         self.history_collection.create_index("timestamp")
-        
-        self.program_id = Pubkey.from_string(PROGRAM_ID_STR)
-        
-        print(f" Bot initialized with authority: {self.authority_pubkey}")
-        print(f" --- MEDIUM TEST CONFIGURATION ---")
-        print(f" Market duration: {MARKET_DURATION_MINUTES} minutes")
-        print(f" Market creation interval: {MARKET_CREATION_INTERVAL_MINUTES} minutes")
-        print(f" Resolution check interval: {CHECK_INTERVAL_SECONDS} seconds")
-        print(f" Sweep grace period: {SWEEP_GRACE_PERIOD_MINUTES} minutes")
-        print(f" -------------------------------")
 
+        self.program_id = Pubkey.from_string(PROGRAM_ID_STR)
+
+        print(f" Bot initialized with authority: {self.authority_pubkey}")
+        print(f"  Market duration: {MARKET_DURATION_MINUTES} minutes")
+        print(f"  Check interval: {CHECK_INTERVAL_SECONDS} seconds")
 
     def _load_keypair(self) -> Keypair:
         raw = PRIVATE_KEY_BYTES
@@ -138,38 +123,34 @@ class PredictionMarketBot:
         elif len(secret_key) == 32:
             return Keypair.from_seed(secret_key)
         else:
-            raise ValueError(f"Invalid secret key length: {len(secret_key)} (expected 32 or 64 bytes)")
-
-    # --- Serialization & Transaction Helpers ---
+            raise ValueError(f"Invalid secret key length: {len(secret_key)}")
 
     def _serialize_string(self, s: str) -> bytes:
-        """Serializes a string Anchor-style (4-byte length prefix + UTF-8 bytes)."""
         s_bytes = s.encode('utf-8')
         return struct.pack('<I', len(s_bytes)) + s_bytes
 
     async def _send_and_confirm_tx(self, instruction: Instruction) -> str:
-        """Builds, signs, sends, and confirms a v0 transaction."""
         blockhash_resp = await self.connection.get_latest_blockhash(commitment=Confirmed)
         recent_blockhash = blockhash_resp.value.blockhash
-        
+
         message = MessageV0.try_compile(
             payer=self.authority_pubkey,
             instructions=[instruction],
             address_lookup_table_accounts=[],
             recent_blockhash=recent_blockhash
         )
-        
+
         tx = VersionedTransaction(message, [self.keypair])
-        
+
         try:
             resp = await self.connection.send_transaction(
-                tx, 
+                tx,
                 opts=rpc_types.TxOpts(skip_preflight=False, preflight_commitment=Confirmed)
             )
             tx_sig = resp.value
-            
+
             await self.connection.confirm_transaction(
-                tx_sig, 
+                tx_sig,
                 commitment=Confirmed,
                 last_valid_block_height=blockhash_resp.value.last_valid_block_height,
                 sleep_seconds=1
@@ -179,27 +160,21 @@ class PredictionMarketBot:
             print(f"Transaction failed: {e}")
             raise e
 
-    # --- Account Deserialization ---
-
     async def _get_config_account(self) -> Optional[ConfigAccount]:
-        """Fetches and deserializes the program's Config account."""
         config_pda, _ = Pubkey.find_program_address([b"config"], self.program_id)
         account_info = await self.connection.get_account_info(config_pda, commitment=Confirmed)
-        
+
         if not account_info.value:
             return None
-        
+
         data = account_info.value.data
-        expected_len = 8 + 32 + 8 + 2 + 1 
+        expected_len = 8 + 32 + 8 + 2 + 1
         if len(data) < expected_len:
-            print(f"Warning: Config account data is too small. Expected {expected_len}, got {len(data)}")
             return None
-            
+
         data_body = data[8:]
-        
         try:
             unpacked = struct.unpack('<32sQHB', data_body[:32+8+2+1])
-            
             return ConfigAccount(
                 authority=Pubkey(unpacked[0]),
                 market_count=unpacked[1],
@@ -210,114 +185,154 @@ class PredictionMarketBot:
             print(f"Failed to unpack Config account: {e}")
             return None
 
-    # --- On-Chain Instruction Implementations ---
+    async def read_onchain_market_id(self, market_pubkey: str) -> Optional[int]:
+        """Read the actual market_id from on-chain account data."""
+        try:
+            pubkey = Pubkey.from_string(market_pubkey)
+            account_info = await self.connection.get_account_info(pubkey, commitment=Confirmed)
+            
+            if not account_info.value:
+                return None
+            
+            data = account_info.value.data
+            
+            if len(data) < 16 or data[:8] != MARKET_DISCRIMINATOR:
+                return None
+            
+            onchain_market_id = struct.unpack('<Q', data[8:16])[0]
+            return onchain_market_id
+            
+        except Exception as e:
+            print(f"  Error reading on-chain market_id: {e}")
+            return None
+
+    async def scan_and_store_market_pubkeys(self):
+        """Scan blockchain for market accounts and sync with database."""
+        print("\n Scanning blockchain for market accounts...")
+        
+        try:
+            response = await self.connection.get_program_accounts(
+                self.program_id,
+                encoding="base64",
+                commitment=Confirmed
+            )
+            
+            markets_found = 0
+            markets_updated = 0
+            
+            for account_info in response.value:
+                try:
+                    pubkey = str(account_info.pubkey)
+                    data = account_info.account.data
+                    
+                    if len(data) < 16:
+                        continue
+                    
+                    if data[:8] != MARKET_DISCRIMINATOR:
+                        continue
+                    
+                    onchain_market_id = struct.unpack('<Q', data[8:16])[0]
+                    markets_found += 1
+                    
+                    doc = self.markets_collection.find_one({"market_id": onchain_market_id})
+                    
+                    if doc:
+                        stored_pubkey = doc.get("market_pubkey")
+                        if not stored_pubkey or stored_pubkey != pubkey:
+                            self.markets_collection.update_one(
+                                {"market_id": onchain_market_id},
+                                {"$set": {"market_pubkey": pubkey}}
+                            )
+                            markets_updated += 1
+                    
+                except Exception as e:
+                    continue
+            
+            print(f" Scan complete! Found {markets_found} markets")
+            if markets_updated > 0:
+                print(f"  - Updated {markets_updated} pubkeys")
+            print()
+            
+        except Exception as e:
+            print(f" Error during market scan: {e}\n")
 
     async def initialize_program(self):
-        """Initialize the prediction market program (one-time setup)"""
         print("Checking program initialization...")
         config_pda, _ = Pubkey.find_program_address([b"config"], self.program_id)
-        
+
         config_account = await self._get_config_account()
         if config_account:
-            print(f" Program already initialized. Authority: {config_account.authority}")
+            print(f" Program already initialized\n")
             return
 
-        print("Program not initialized. Sending initialize transaction...")
+        print("Initializing program...")
         try:
             data = DISCRIMINATORS["initialize"]
-            
+
             accounts = [
                 AccountMeta(config_pda, is_signer=False, is_writable=True),
                 AccountMeta(self.authority_pubkey, is_signer=True, is_writable=True),
                 AccountMeta(SYSTEM_PROGRAM_ID, is_signer=False, is_writable=False),
             ]
-            
+
             instruction = Instruction(self.program_id, data, accounts)
             tx_sig = await self._send_and_confirm_tx(instruction)
-            print(f" Program initialized: {tx_sig}")
-            
+            print(f" Program initialized: {tx_sig}\n")
+
         except Exception as e:
-            print(f" Initialization error: {e}")
+            print(f" Initialization error: {e}\n")
 
     def generate_market_idea(self) -> Optional[Dict]:
-        """Use Groq AI to generate a prediction market idea"""
         try:
-            prompt = """You are an expert creator of prediction market questions. Your goal is to generate a single, high-quality, objectively resolvable market.
+            prompt = """Generate a prediction market question.
 
-**CRITICAL REQUIREMENTS:**
-1.  **Objectively Resolvable:** The question MUST be a binary (YES/NO) question that can be answered with a verifiable fact, statistic, or event. There should be zero ambiguity.
-2.  **Specific Resolution Criteria:** The 'description' must clearly state HOW the market will be resolved (e.g., "Resolution will be based on the official press release from Company X by date Y," or "Based on the closing price on exchange Z at time T.").
-3.  **Timely:** The question should be about a current or near-future event.
-
-**--- EXAMPLES ---**
-* **GOOD (Verifiable):** "Will 'Dune: Part Three' be officially announced with a 2027 release date by December 31, 2025?"
-* **BAD (Subjective):** "Will 'Dune: Part Three' be a good movie?"
-* **GOOD (Specific):** "Will the closing price of Bitcoin (BTC) on Coinbase be above $70,000.00 USD at 23:59 UTC on November 15, 2025?"
-* **BAD (Vague):** "Will Bitcoin go up a lot soon?"
-* **GOOD (Specific):** "Will the US Federal Reserve lower the Federal Funds Rate at their December 2025 FOMC meeting?"
-* **BAD (Vague):** "Will the economy improve next year?"
-**--- END EXAMPLES ---**
-
-Generate a new market question about technology, finance, sports, or global events.
-
-Return ONLY a raw JSON object with this exact structure. Do not include markdown (```json) or any other text.
+Return ONLY JSON:
 {
-    "question": "A clear yes/no question under 200 characters",
-    "description": "Detailed context and unambiguous resolution criteria under 1000 characters",
-    "category": "One of: Technology, Finance, Sports, Politics, Entertainment"
+    "question": "Clear yes/no question under 200 characters",
+    "description": "Resolution criteria under 1000 characters",
+    "category": "Technology, Finance, Sports, Politics, or Entertainment"
 }"""
 
             response = self.groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile", # Using your specified model
+                model="llama-3.3-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.8,
                 max_tokens=500
             )
-            
+
             content = response.choices[0].message.content.strip()
-            
+
             if content.startswith("```json"):
                 content = content.split("```json")[1].split("```")[0].strip()
             elif content.startswith("```"):
                 content = content.split("```")[1].split("```")[0].strip()
-            
+
             market_data = json.loads(content)
-            
+
             if not all(k in market_data for k in ["question", "description", "category"]):
                 raise ValueError("Missing required fields")
-            
+
             return market_data
-            
+
         except Exception as e:
             print(f" Market generation error: {e}")
             return None
 
-    async def create_market_onchain(self, market_data: Dict) -> Optional[int]:
-        """Create market on Solana blockchain"""
+    async def create_market_onchain(self, market_data: Dict) -> Optional[Dict]:
         try:
             config_pda, _ = Pubkey.find_program_address([b"config"], self.program_id)
             config_account = await self._get_config_account()
             if not config_account:
-                raise ValueError("Config account not found. Is program initialized?")
-            
+                raise ValueError("Config account not found")
+
             market_id = config_account.market_count
-            
-            # --- MODIFIED FOR MEDIUM TEST ---
             resolution_time = int((datetime.now(timezone.utc) + timedelta(minutes=MARKET_DURATION_MINUTES)).timestamp())
-            # --- END MODIFICATION ---
-            
             initial_liquidity = int(INITIAL_LIQUIDITY_SOL * 1_000_000_000)
-            
+
             market_id_bytes = market_id.to_bytes(8, "little")
-            market_pda, _ = Pubkey.find_program_address(
-                [b"market", market_id_bytes], 
-                self.program_id
-            )
-            vault_pda, _ = Pubkey.find_program_address(
-                [b"vault", market_id_bytes], 
-                self.program_id
-            )
-            
+            market_pda, _ = Pubkey.find_program_address([b"market", market_id_bytes], self.program_id)
+            vault_pda, _ = Pubkey.find_program_address([b"vault", market_id_bytes], self.program_id)
+
             data = DISCRIMINATORS["create_market"]
             data += struct.pack('<Q', market_id)
             data += self._serialize_string(market_data["question"])
@@ -333,22 +348,22 @@ Return ONLY a raw JSON object with this exact structure. Do not include markdown
                 AccountMeta(self.authority_pubkey, is_signer=True, is_writable=True),
                 AccountMeta(SYSTEM_PROGRAM_ID, is_signer=False, is_writable=False),
             ]
-            
+
             instruction = Instruction(self.program_id, data, accounts)
             tx_sig = await self._send_and_confirm_tx(instruction)
-            
-            print(f" Market #{market_id} created on-chain: {tx_sig}")
-            return market_id
-            
+
+            print(f" Market #{market_id} created: {tx_sig}")
+            return {"market_id": market_id, "market_pubkey": str(market_pda), "resolution_time": resolution_time}
+
         except Exception as e:
-            print(f" On-chain creation error: {e}")
+            print(f" Market creation error: {e}")
             return None
 
-    async def store_market_in_db(self, market_id: int, market_data: Dict, resolution_time: int):
-        """Store market metadata in MongoDB"""
+    async def store_market_in_db(self, market_id: int, market_data: Dict, resolution_time: int, market_pubkey: str):
         try:
             document = {
                 "market_id": market_id,
+                "market_pubkey": market_pubkey,
                 "question": market_data["question"],
                 "description": market_data["description"],
                 "category": market_data["category"],
@@ -360,52 +375,49 @@ Return ONLY a raw JSON object with this exact structure. Do not include markdown
                 "resolved_at": None,
                 "swept": False
             }
-            
-            self.markets_collection.insert_one(document)
-            print(f" Market #{market_id} stored in database")
-            
+
+            self.markets_collection.update_one(
+                {"market_id": market_id},
+                {"$set": document},
+                upsert=True
+            )
+
         except Exception as e:
-            print(f" Database storage error: {e}")
+            print(f" Database error: {e}")
 
     async def create_new_market(self):
-        """Full flow: Generate idea → Create on-chain → Store in DB"""
         print("\n Generating new market...")
-        
+
         market_data = self.generate_market_idea()
         if not market_data:
             return
-        
-        print(f" Question: {market_data['question']}")
-        print(f"   Category: {market_data['category']}")
-        
-        market_id = await self.create_market_onchain(market_data)
-        if market_id is None:
+
+        print(f" {market_data['question']}")
+
+        created = await self.create_market_onchain(market_data)
+        if not created:
             return
-        
-        # --- MODIFIED FOR MEDIUM TEST ---
-        resolution_time = int((datetime.now(timezone.utc) + timedelta(minutes=MARKET_DURATION_MINUTES)).timestamp())
-        # --- END MODIFICATION ---
-        await self.store_market_in_db(market_id, market_data, resolution_time)
-        
-        print(f" Market #{market_id} fully created!\n")
+
+        await self.store_market_in_db(
+            created["market_id"], 
+            market_data, 
+            created["resolution_time"],
+            created["market_pubkey"]
+        )
 
     def resolve_market_with_ai(self, market_data: Dict) -> Optional[Dict]:
-        """Use Groq AI to determine market outcome"""
         try:
-            prompt = f"""You are resolving a prediction market. Based on current information, determine the outcome.
+            prompt = f"""Resolve this prediction market.
 
-MARKET QUESTION: {market_data['question']}
+QUESTION: {market_data['question']}
 DESCRIPTION: {market_data['description']}
-CATEGORY: {market_data['category']}
 
-Analyze the question and provide a resolution. Return ONLY a JSON object:
+Return ONLY JSON:
 {{
-    "outcome": true or false (true = YES won, false = NO won),
-    "reasoning": "Brief explanation of why this outcome is correct (under 500 chars)",
-    "confidence": 0.0 to 1.0 (how confident you are in this resolution)
-}}
-
-Be objective and base your decision on verifiable facts. If you cannot determine the outcome with reasonable confidence (>0.6), set confidence to 0.0."""
+    "outcome": true or false,
+    "reasoning": "Brief explanation under 500 chars",
+    "confidence": 0.0 to 1.0
+}}"""
 
             response = self.groq_client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
@@ -413,37 +425,56 @@ Be objective and base your decision on verifiable facts. If you cannot determine
                 temperature=0.3,
                 max_tokens=300
             )
-            
+
             content = response.choices[0].message.content.strip()
 
             if content.startswith("```json"):
                 content = content.split("```json")[1].split("```")[0].strip()
             elif content.startswith("```"):
                 content = content.split("```")[1].split("```")[0].strip()
-            
-            resolution = json.loads(content)
-            
-            # --- CONFIDENCE CHECK REMOVED FOR TESTING ---
-            print(f"   AI confidence was: {resolution.get('confidence', 'N/A')}. Resolving anyway.")
-            # --- END REMOVAL ---
-            
-            return resolution
-            
+
+            return json.loads(content)
+
         except Exception as e:
             print(f" AI resolution error: {e}")
             return None
 
     async def resolve_market_onchain(self, market_id: int, outcome_yes: bool) -> bool:
-        """Resolve market on Solana blockchain"""
+        """
+        CRITICAL FIX: Pass market_id as instruction parameter for Anchor PDA validation.
+        """
         try:
-            config_pda, _ = Pubkey.find_program_address([b"config"], self.program_id)
-            market_id_bytes = market_id.to_bytes(8, "little")
-            market_pda, _ = Pubkey.find_program_address(
-                [b"market", market_id_bytes], 
-                self.program_id
-            )
+            doc = self.markets_collection.find_one({"market_id": market_id})
+            if not doc:
+                print(f"  Market #{market_id} not in database")
+                return False
             
+            market_pubkey_str = doc.get("market_pubkey")
+            if not market_pubkey_str:
+                print(f"  Market #{market_id} has no pubkey")
+                return False
+
+            # Verify on-chain market_id matches
+            onchain_market_id = await self.read_onchain_market_id(market_pubkey_str)
+            if onchain_market_id is None:
+                print(f"  Failed to read on-chain data")
+                return False
+            
+            if onchain_market_id != market_id:
+                print(f"  Market ID mismatch: DB={market_id}, On-chain={onchain_market_id}")
+                print(f"  Updating database...")
+                self.markets_collection.update_one(
+                    {"market_pubkey": market_pubkey_str},
+                    {"$set": {"market_id": onchain_market_id}}
+                )
+                market_id = onchain_market_id
+            
+            market_pda = Pubkey.from_string(market_pubkey_str)
+            config_pda, _ = Pubkey.find_program_address([b"config"], self.program_id)
+
+            # CRITICAL FIX: Include market_id as instruction data parameter
             data = DISCRIMINATORS["resolve_market"]
+            data += struct.pack('<Q', market_id)  # <-- This is the fix!
             data += struct.pack('<B', outcome_yes)
 
             accounts = [
@@ -454,29 +485,32 @@ Be objective and base your decision on verifiable facts. If you cannot determine
 
             instruction = Instruction(self.program_id, data, accounts)
             tx_sig = await self._send_and_confirm_tx(instruction)
-            
-            print(f" Market #{market_id} resolved on-chain: {tx_sig}")
+
+            print(f" Market #{market_id} resolved: {tx_sig}")
             return True
-            
+
         except Exception as e:
-            print(f" On-chain resolution error: {e}")
+            print(f" Resolution error: {e}")
             return False
 
     async def sweep_funds_onchain(self, market_id: int) -> bool:
-        """Sweep remaining funds from a resolved market's vault."""
-        print(f" Sweeping funds from Market #{market_id}...")
         try:
-            config_pda, _ = Pubkey.find_program_address([b"config"], self.program_id)
-            market_id_bytes = market_id.to_bytes(8, "little")
-            market_pda, _ = Pubkey.find_program_address(
-                [b"market", market_id_bytes], 
-                self.program_id
-            )
-            vault_pda, _ = Pubkey.find_program_address(
-                [b"vault", market_id_bytes], 
-                self.program_id
-            )
+            doc = self.markets_collection.find_one({"market_id": market_id})
+            if not doc or not doc.get("market_pubkey"):
+                return False
+
+            market_pubkey_str = doc.get("market_pubkey")
+            onchain_market_id = await self.read_onchain_market_id(market_pubkey_str)
+            if onchain_market_id is None:
+                return False
             
+            market_pda = Pubkey.from_string(market_pubkey_str)
+            config_pda, _ = Pubkey.find_program_address([b"config"], self.program_id)
+            vault_pda, _ = Pubkey.find_program_address(
+                [b"vault", onchain_market_id.to_bytes(8, "little")], 
+                self.program_id
+            )
+
             data = DISCRIMINATORS["sweep_funds"]
 
             accounts = [
@@ -490,46 +524,165 @@ Be objective and base your decision on verifiable facts. If you cannot determine
             instruction = Instruction(self.program_id, data, accounts)
             tx_sig = await self._send_and_confirm_tx(instruction)
 
-            print(f" Funds swept from Market #{market_id}: {tx_sig}")
+            print(f" Swept Market #{market_id}: {tx_sig}")
             return True
 
         except Exception as e:
             if "No remaining funds" in str(e) or "6016" in str(e):
-                print(f"   No funds to sweep in Market #{market_id}.")
                 return True
+            print(f" Sweep error: {e}")
+            return False
+
+    def _parse_buy_shares_event(self, log_data: str):
+        try:
+            data = base64.b64decode(log_data)
+            data_body = data[8:]
+
+            offset = 0
+            market_pubkey = str(Pubkey(data_body[offset:offset+32]))
+            offset += 32
+            market_id = struct.unpack_from('<Q', data_body, offset)[0]
+            offset += 8
+            user = str(Pubkey(data_body[offset:offset+32]))
+            offset += 32
+            is_yes = bool(struct.unpack_from('<B', data_body, offset)[0])
+            offset += 1
+            shares = struct.unpack_from('<Q', data_body, offset)[0]
+            offset += 8
+            yes_liquidity = struct.unpack_from('<Q', data_body, offset)[0]
+            offset += 8
+            no_liquidity = struct.unpack_from('<Q', data_body, offset)[0]
+
+            return {
+                "market_pubkey": market_pubkey,
+                "market_id": market_id,
+                "user": user,
+                "is_yes": is_yes,
+                "shares": shares,
+                "yes_liquidity": str(yes_liquidity),
+                "no_liquidity": str(no_liquidity),
+            }
+        except:
+            return None
+
+    async def run_event_listener(self):
+        print(f"\n Starting event listener...")
+
+        while True:
+            try:
+                async with connect(SOLANA_WS_URL) as websocket:
+                    await websocket.logs_subscribe(
+                        RpcTransactionLogsFilterMentions(self.program_id),
+                        commitment=Confirmed
+                    )
+
+                    first_resp = await websocket.recv()
+                    if not first_resp:
+                        raise Exception("No websocket response")
+
+                    print(f"  Connected to event stream\n")
+
+                    while True:
+                        try:
+                            msgs = await websocket.recv()
+                            for msg in msgs:
+                                if not msg or not hasattr(msg, 'result'):
+                                    continue
+
+                                logs = msg.result.value.logs
+                                if not logs:
+                                    continue
+
+                                for log in logs:
+                                    if log.startswith("Program data: "):
+                                        log_data = log.split("Program data: ")[1]
+                                        if log_data.startswith(EVENT_DISCRIMINATOR_BUY_SHARES):
+                                            event = self._parse_buy_shares_event(log_data)
+                                            if event:
+                                                print(f"  Trade: Market #{event['market_id']} - {'YES' if event['is_yes'] else 'NO'}")
+                                                self.history_collection.insert_one({
+                                                    "market_pubkey": event["market_pubkey"],
+                                                    "timestamp": datetime.now(timezone.utc),
+                                                    "yes_liquidity": event["yes_liquidity"],
+                                                    "no_liquidity": event["no_liquidity"],
+                                                })
+
+                        except Exception as e:
+                            print(f"  Event error: {e}")
+
+            except Exception as e:
+                print(f" WebSocket error: {e}")
+                print("Reconnecting in 10 seconds...")
+                await asyncio.sleep(10)
+
+    async def verify_market_pda(self, market_id: int, market_pubkey: str) -> bool:
+        """
+        Verify if a market's PDA matches what the current program expects.
+        Returns True if valid, False if corrupted (from old program version).
+        """
+        try:
+            # Derive what the PDA SHOULD be
+            expected_pda, _ = Pubkey.find_program_address(
+                [b"market", market_id.to_bytes(8, "little")],
+                self.program_id
+            )
             
-            print(f" On-chain sweep error for Market #{market_id}: {e}")
+            # Compare with stored pubkey
+            return str(expected_pda) == market_pubkey
+        except:
             return False
 
     async def check_and_resolve_markets(self):
-        """Check for markets that need resolution and resolve them"""
         current_time = datetime.now(timezone.utc)
         current_timestamp = int(current_time.timestamp())
-        
-        # --- 1. Resolve Markets ---
+
         markets_to_resolve = self.markets_collection.find({
             "resolved": False,
             "resolution_time": {"$lte": current_timestamp}
         })
-        
+
         for market in markets_to_resolve:
-            print(f"\n Market #{market['market_id']} ready for resolution")
-            print(f"   Question: {market['question']}")
+            market_id = market['market_id']
+            market_pubkey = market.get('market_pubkey')
             
-            resolution = self.resolve_market_with_ai(market)
-            if not resolution:
-                print(f"   Skipped (AI error)")
+            if not market_pubkey:
+                print(f"\n  Skipping Market #{market_id} (no pubkey stored)")
                 continue
             
+            # Verify PDA is valid for current program version
+            is_valid = await self.verify_market_pda(market_id, market_pubkey)
+            if not is_valid:
+                print(f"\n  Skipping Market #{market_id} (corrupted PDA from old program)")
+                print(f"     This market was created before program redeployment")
+                # Mark as resolved to prevent retrying
+                self.markets_collection.update_one(
+                    {"market_id": market_id},
+                    {
+                        "$set": {
+                            "resolved": True,
+                            "outcome": None,
+                            "resolution_reasoning": "Market corrupted - created with old program version",
+                            "resolved_at": datetime.now(timezone.utc)
+                        }
+                    }
+                )
+                continue
+            
+            print(f"\n Resolving Market #{market_id}")
+            print(f"  {market['question']}")
+
+            resolution = self.resolve_market_with_ai(market)
+            if not resolution:
+                continue
+
             outcome_yes = resolution["outcome"]
-            print(f"   Outcome: {'YES' if outcome_yes else 'NO'}")
-            print(f"   Reasoning: {resolution['reasoning']}")
-            
-            success = await self.resolve_market_onchain(market["market_id"], outcome_yes)
-            
+            print(f"  Outcome: {'YES' if outcome_yes else 'NO'}")
+
+            success = await self.resolve_market_onchain(market_id, outcome_yes)
+
             if success:
                 self.markets_collection.update_one(
-                    {"market_id": market["market_id"]},
+                    {"market_id": market_id},
                     {
                         "$set": {
                             "resolved": True,
@@ -539,13 +692,9 @@ Be objective and base your decision on verifiable facts. If you cannot determine
                         }
                     }
                 )
-                print(f"   Resolution complete!")
 
-        # --- 2. Sweep Funds ---
-        # --- MODIFIED FOR MEDIUM TEST ---
+        # Sweep funds
         sweep_cutoff = current_time - timedelta(minutes=SWEEP_GRACE_PERIOD_MINUTES)
-        # --- END MODIFICATION ---
-        
         markets_to_sweep = self.markets_collection.find({
             "resolved": True,
             "swept": False,
@@ -553,238 +702,60 @@ Be objective and base your decision on verifiable facts. If you cannot determine
         })
 
         for market in markets_to_sweep:
-            print(f"\n Market #{market['market_id']} ready for sweeping (resolved at {market['resolved_at']}).")
-            
+            print(f"\n Sweeping Market #{market['market_id']}")
             success = await self.sweep_funds_onchain(market["market_id"])
-            
             if success:
                 self.markets_collection.update_one(
                     {"market_id": market["market_id"]},
                     {"$set": {"swept": True}}
                 )
-                print(f"   Sweep complete!")
-                
-    # --- Event Listener ---
-    
-    # --- PARSER FIX: This is the corrected parser (u64 liquidity) ---
-    def _parse_buy_shares_event(self, log_data: str):
-        """
-        Parses the base64 data from an Anchor event log.
-        Event: BuySharesEvent (from programs/capstone2/src/lib.rs)
-        - market_pubkey: Pubkey (32)
-        - market_id: u64 (8)
-        - user: Pubkey (32)
-        - is_yes: bool (1)
-        - shares: u64 (8)
-        - yes_liquidity: u64 (8)  <-- CORRECTED
-        - no_liquidity: u64 (8)   <-- CORRECTED
-        - timestamp: i64 (8)
-        """
-        try:
-            # Anchor event data is base64
-            data = base64.b64decode(log_data)
-            
-            # Skip 8-byte discriminator
-            data_body = data[8:]
-            
-            offset = 0
-            
-            # 1. market_pubkey (32 bytes)
-            market_pubkey_bytes = data_body[offset:offset+32]
-            market_pubkey = str(Pubkey(market_pubkey_bytes))
-            offset += 32
-            
-            # 2. market_id (8 bytes, u64)
-            market_id = struct.unpack_from('<Q', data_body, offset)[0]
-            offset += 8
-            
-            # 3. user (32 bytes)
-            user_bytes = data_body[offset:offset+32]
-            user = str(Pubkey(user_bytes))
-            offset += 32
-            
-            # 4. is_yes (1 byte, bool)
-            is_yes = bool(struct.unpack_from('<B', data_body, offset)[0])
-            offset += 1
-            
-            # 5. shares (8 bytes, u64)
-            shares = struct.unpack_from('<Q', data_body, offset)[0]
-            offset += 8
-            
-            # 6. yes_liquidity (8 bytes, u64) <-- FIX
-            yes_liquidity = struct.unpack_from('<Q', data_body, offset)[0]
-            offset += 8
-            
-            # 7. no_liquidity (8 bytes, u64) <-- FIX
-            no_liquidity = struct.unpack_from('<Q', data_body, offset)[0]
-            offset += 8
-            
-            # 8. timestamp (8 bytes, i64)
-            timestamp = struct.unpack_from('<q', data_body, offset)[0]
-            offset += 8
-            
-            return {
-                "market_pubkey": market_pubkey,
-                "market_id": market_id,
-                "user": user,
-                "is_yes": is_yes,
-                "shares": shares,
-                "yes_liquidity": str(yes_liquidity), # Convert to string for JSON/Mongo
-                "no_liquidity": str(no_liquidity), # Convert to string for JSON/Mongo
-                "timestamp": timestamp,
-            }
-        except Exception as e:
-            # Add a print here to see the error
-            print(f"!!! FAILED TO PARSE BuySharesEvent: {e} | Log data: {log_data}")
-            return None
-    # --- END PARSER FIX ---
-
-    # --- FINAL LISTENER FIX (v3): Correctly access solders response ---
-    async def run_event_listener(self):
-        """Listens for program logs using standard logs_subscribe."""
-        print(f"\n Starting event listener for program: {self.program_id}")
-        
-        while True: # Auto-restart loop
-            try:
-                # Use the solana-py connect function with the WSS URL from .env
-                # This will work with QuickNode
-                async with connect(SOLANA_WS_URL) as websocket:
-                    
-                    # Subscribe to logs mentioning the program ID
-                    await websocket.logs_subscribe(
-                        RpcTransactionLogsFilterMentions(self.program_id),
-                        commitment=Confirmed
-                    )
-                    
-                    # Get the subscription confirmation
-                    first_resp_list = await websocket.recv()
-                    
-                    # FIX: Get the first item from the list
-                    if not first_resp_list:
-                        raise Exception("No response from websocket subscribe")
-                    
-                    subscription_id = first_resp_list[0].result
-                    print(f"   Successfully subscribed to logs with ID: {subscription_id}")
-                    
-                    # FIX: Start a new loop to continuously receive messages
-                    while True:
-                        try:
-                            # Wait for new messages
-                            msg_list = await websocket.recv()
-                            
-                            # Iterate over the list of messages received
-                            for msg_raw in msg_list:
-                                
-                                # --- THIS IS THE FIX ---
-                                # Check for log notifications
-                                # The object is msg_raw.result.value.logs
-                                if not msg_raw or not hasattr(msg_raw, 'result') or not msg_raw.result or not hasattr(msg_raw.result, 'value'):
-                                    continue
-                                
-                                logs = msg_raw.result.value.logs
-                                # --- END FIX ---
-
-                                if not logs:
-                                    continue
-                                
-                                found_event = False
-                                for log in logs:
-                                    if log.startswith("Program data: "):
-                                        log_data = log.split("Program data: ")[1]
-                                        
-                                        # Check if it's the BuySharesEvent
-                                        if log_data.startswith(EVENT_DISCRIMINATOR_BUY_SHARES):
-                                            event_data = self._parse_buy_shares_event(log_data)
-                                            if event_data:
-                                                # This is the log you want to see
-                                                print(f"   EVENT FOUND: User {event_data['user']} bought shares for market {event_data['market_pubkey']}")
-                                                
-                                                # Save to history collection
-                                                self.history_collection.insert_one({
-                                                    "market_pubkey": event_data["market_pubkey"],
-                                                    "timestamp": event_data["timestamp"],
-                                                    "yes_liquidity": event_data["yes_liquidity"],
-                                                    "no_liquidity": event_data["no_liquidity"],
-                                                })
-                                                found_event = True
-                                                break # Found the event, no need to check other logs
-                                
-                                if not found_event:
-                                    pass # Normal transaction, just not the one we want
-
-                        except Exception as e:
-                            # Don't crash the whole listener for one bad message
-                            print(f"   Error processing message: {e}")
-
-            except Exception as e:
-                print(f"Event listener WebSocket error: {e}")
-                print("Restarting listener in 10 seconds...")
-                await asyncio.sleep(10)
-    # --- END LISTENER FIX ---
 
     async def run_resolution_loop(self):
-        """Continuously check for markets to resolve/sweep"""
-        print(f" Starting resolution loop (checking every {CHECK_INTERVAL_SECONDS}s)...\n")
-        
+        print(f" Resolution loop active\n")
         while True:
             try:
                 await self.check_and_resolve_markets()
             except Exception as e:
                 print(f" Resolution loop error: {e}")
-            
             await asyncio.sleep(CHECK_INTERVAL_SECONDS)
 
     async def run_market_creation_loop(self):
-        """Continuously create new markets on a schedule"""
-        print(f" Starting market creation loop (creating every {MARKET_CREATION_INTERVAL_MINUTES}m)...\n")
-        
+        print(f" Market creation loop active\n")
         while True:
             try:
                 await self.create_new_market()
             except Exception as e:
-                print(f" Market creation loop error: {e}")
-            
-            # --- MODIFIED FOR MEDIUM TEST ---
-            wait_seconds = MARKET_CREATION_INTERVAL_MINUTES * 60
-            print(f" Next market will be created in {MARKET_CREATION_INTERVAL_MINUTES} minutes...\n")
-            # --- END MODIFICATION ---
-            await asyncio.sleep(wait_seconds)
+                print(f" Creation error: {e}")
+            await asyncio.sleep(MARKET_CREATION_INTERVAL_MINUTES * 60)
 
     async def run(self):
-        """Main bot loop"""
-        print(" Prediction Market Bot Starting...\n")
-        
+        print(" Prediction Market Bot Starting\n")
         await self.initialize_program()
-        
-        # --- Still creating 3 initial markets ---
-        print(" Creating 3 initial markets for testing...")
+        await self.scan_and_store_market_pubkeys()
+
+        print(" Creating 3 initial markets...")
         for i in range(3):
-            print(f"--- Creating initial market {i+1}/3 ---")
             await self.create_new_market()
-        # --- END MODIFICATION ---
-        
-        print("\n Starting background loops...")
-        resolution_task = asyncio.create_task(self.run_resolution_loop())
-        creation_task = asyncio.create_task(self.run_market_creation_loop())
-        listener_task = asyncio.create_task(self.run_event_listener())
-        
-        await asyncio.gather(resolution_task, creation_task, listener_task)
+
+        print("\n Starting background loops...\n")
+        await asyncio.gather(
+            self.run_resolution_loop(),
+            self.run_market_creation_loop(),
+            self.run_event_listener()
+        )
 
     async def close(self):
-        """Cleanup resources"""
         await self.connection.close()
         self.mongo_client.close()
-
 
 async def main():
     bot = PredictionMarketBot()
     try:
         await bot.run()
     except KeyboardInterrupt:
-        print("\n\n Bot shutting down gracefully...")
+        print("\n\n Bot shutting down...")
     finally:
         await bot.close()
-
 
 if __name__ == "__main__":
     asyncio.run(main())

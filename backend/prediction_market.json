@@ -314,9 +314,8 @@
                 "value": [109, 97, 114, 107, 101, 116]
               },
               {
-                "kind": "account",
-                "path": "market.market_id",
-                "account": "Market"
+                "kind": "arg",
+                "path": "market_id"
               }
             ]
           }
@@ -328,6 +327,10 @@
         }
       ],
       "args": [
+        {
+          "name": "market_id",
+          "type": "u64"
+        },
         {
           "name": "outcome_yes",
           "type": "bool"
@@ -384,7 +387,6 @@
         },
         {
           "name": "authority",
-          "docs": ["Authority receives the sweep funds"],
           "writable": true,
           "signer": true
         },
@@ -410,46 +412,52 @@
       "discriminator": [251, 248, 209, 245, 83, 234, 17, 27]
     }
   ],
+  "events": [
+    {
+      "name": "BuySharesEvent",
+      "discriminator": [185, 52, 1, 127, 117, 180, 40, 122]
+    }
+  ],
   "errors": [
     {
       "code": 6000,
       "name": "Unauthorized",
-      "msg": "Unauthorized: Only AI authority can perform this action"
+      "msg": "Unauthorized"
     },
     {
       "code": 6001,
       "name": "QuestionTooLong",
-      "msg": "Question too long (max 200 characters)"
+      "msg": "Question too long"
     },
     {
       "code": 6002,
       "name": "DescriptionTooLong",
-      "msg": "Description too long (max 1000 characters)"
+      "msg": "Description too long"
     },
     {
       "code": 6003,
       "name": "CategoryTooLong",
-      "msg": "Category too long (max 50 characters)"
+      "msg": "Category too long"
     },
     {
       "code": 6004,
       "name": "InvalidResolutionTime",
-      "msg": "Invalid resolution time (must be in the future)"
+      "msg": "Invalid resolution time"
     },
     {
       "code": 6005,
       "name": "InsufficientInitialLiquidity",
-      "msg": "Insufficient initial liquidity (minimum 0.01 SOL)"
+      "msg": "Insufficient initial liquidity"
     },
     {
       "code": 6006,
       "name": "MarketResolved",
-      "msg": "Market has already been resolved"
+      "msg": "Market already resolved"
     },
     {
       "code": 6007,
       "name": "MarketExpired",
-      "msg": "Market has expired (past resolution time)"
+      "msg": "Market expired"
     },
     {
       "code": 6008,
@@ -464,12 +472,12 @@
     {
       "code": 6010,
       "name": "InsufficientLiquidity",
-      "msg": "Insufficient liquidity in pool"
+      "msg": "Insufficient liquidity"
     },
     {
       "code": 6011,
       "name": "SlippageExceeded",
-      "msg": "Slippage tolerance exceeded"
+      "msg": "Slippage exceeded"
     },
     {
       "code": 6012,
@@ -479,25 +487,65 @@
     {
       "code": 6013,
       "name": "MarketNotResolved",
-      "msg": "Market not resolved yet"
+      "msg": "Market not resolved"
     },
     {
       "code": 6014,
       "name": "NoWinningShares",
-      "msg": "No winning shares to claim"
+      "msg": "No winning shares"
     },
     {
       "code": 6015,
       "name": "AlreadyClaimed",
-      "msg": "Winnings already claimed"
+      "msg": "Already claimed"
     },
     {
       "code": 6016,
       "name": "NoRemainingFunds",
-      "msg": "No remaining funds in the vault to sweep"
+      "msg": "No remaining funds"
     }
   ],
   "types": [
+    {
+      "name": "BuySharesEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market_pubkey",
+            "type": "pubkey"
+          },
+          {
+            "name": "market_id",
+            "type": "u64"
+          },
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "is_yes",
+            "type": "bool"
+          },
+          {
+            "name": "shares",
+            "type": "u64"
+          },
+          {
+            "name": "yes_liquidity",
+            "type": "u64"
+          },
+          {
+            "name": "no_liquidity",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
     {
       "name": "Config",
       "type": {
@@ -569,7 +617,7 @@
           },
           {
             "name": "k_constant",
-            "type": "u64"
+            "type": "u128"
           },
           {
             "name": "total_volume",
@@ -584,6 +632,14 @@
             "type": {
               "option": "bool"
             }
+          },
+          {
+            "name": "total_yes_shares",
+            "type": "u128"
+          },
+          {
+            "name": "total_no_shares",
+            "type": "u128"
           },
           {
             "name": "bump",
