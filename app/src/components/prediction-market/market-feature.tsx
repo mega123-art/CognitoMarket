@@ -43,7 +43,7 @@ export function MarketFeature() {
   return (
     <div>
       {/* MODIFIED: Pass plain strings. AppHero now handles styling. */}
-      <AppHero title="Cognito Market" subtitle="Decentralized Prediction Markets" />
+      <AppHero title="Cognito Market" subtitle="AI Based Decentralized Prediction Markets" />
       {getMarkets.isLoading && <div>Loading markets...</div>}
       {getMarkets.isError && <div className="alert alert-error">Error loading markets: {getMarkets.error.message}</div>}
 
