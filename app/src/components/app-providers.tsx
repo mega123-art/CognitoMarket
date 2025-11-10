@@ -1,19 +1,28 @@
+// src/components/app-providers.tsx
 'use client'
 
 import { ThemeProvider } from '@/components/theme-provider'
 import { ReactQueryProvider } from './react-query-provider'
-import { ClusterProvider } from '@/components/cluster/cluster-data-access'
-import { SolanaProvider } from '@/components/solana/solana-provider'
-import React from 'react'
+import { SolanaProvider } from './solana/solana-provider'
+import { Toaster } from '@/components/ui/sonner'
+import { FloatingBuyElements } from './floating-buy-elements'
+import { ConfettiEffect } from './confetti-effect'
+import { ClusterProvider } from './cluster/cluster-data-access' // MODIFIED: Import ClusterProvider
 
-export function AppProviders({ children }: Readonly<{ children: React.ReactNode }>) {
+export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
-    <ReactQueryProvider>
-      <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+      <ReactQueryProvider>
+        {/* MODIFIED: Wrap SolanaProvider with ClusterProvider */}
         <ClusterProvider>
-          <SolanaProvider>{children}</SolanaProvider>
+          <SolanaProvider>
+            {children}
+            <Toaster />
+            <FloatingBuyElements />
+            <ConfettiEffect />
+          </SolanaProvider>
         </ClusterProvider>
-      </ThemeProvider>
-    </ReactQueryProvider>
+      </ReactQueryProvider>
+    </ThemeProvider>
   )
 }

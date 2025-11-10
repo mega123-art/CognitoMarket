@@ -1,11 +1,15 @@
 // src/app/layout.tsx
-import type { Metadata } from 'next'
+'use client' // MODIFIED: Add 'use client' to use hooks
+
 import './globals.css'
 import { AppProviders } from '@/components/app-providers'
 import { AppLayout } from '@/components/app-layout'
-import React from 'react'
-// Add at the top of the file:
+import React, { useState, useEffect } from 'react' // MODIFIED: Import hooks
 import { Geist, Geist_Mono } from 'next/font/google'
+import { LandingScreen } from '@/components/landing-screen' // MODIFIED: Import LandingScreen
+// MODIFIED: Remove effect component imports
+// import { FloatingBuyElements } from '@/components/floating-buy-elements'
+// import { ConfettiEffect } from '@/components/confetti-effect'
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -19,10 +23,13 @@ const geistMono = Geist_Mono({
 
 // Then use in body:
 const antialiased = `${geistSans.variable} ${geistMono.variable} antialiased`
+
+/*
 export const metadata: Metadata = {
   title: 'Cognitomarket',
   description: 'Decentralized Prediction Markets', // Updated description
 }
+*/
 
 // Updated links
 const links: { label: string; path: string }[] = [
@@ -32,12 +39,30 @@ const links: { label: string; path: string }[] = [
 ]
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // MODIFIED: Add state for loading screen
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    // Hide landing screen after 2.5 seconds
+    const timer = setTimeout(() => {
+      setIsLoading(false)
+    }, 2500) // 2.5 seconds
+
+    return () => clearTimeout(timer)
+  }, [])
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={antialiased}>
-        <AppProviders>
-          <AppLayout links={links}>{children}</AppLayout>
-        </AppProviders>
+        {/* MODIFIED: Conditionally render LandingScreen or App content */}
+        {isLoading ? (
+          <LandingScreen />
+        ) : (
+          <AppProviders>
+            <AppLayout links={links}>{children}</AppLayout>
+          </AppProviders>
+        )}
+        {/* MODIFIED: Removed effect components from here */}
       </body>
     </html>
   )

@@ -44,78 +44,78 @@
 
 :root {
   --radius: 0rem; /* NO ROUNDED CORNERS */
-  --background: #FFFF00; /* YELLOW BACKGROUND */
-  --foreground: #000000;
-  --card: #ffffff; /* White cards on yellow bg */
-  --card-foreground: #000000;
+  --background: #FFEBFF; /* Light Pink */
+  --foreground: #2A002A; /* Dark Purple */
+  --card: #ffffff; /* White cards */
+  --card-foreground: #2A002A;
   --popover: #ffffff;
-  --popover-foreground: #000000;
-  --primary: #00FF00; /* LIME ACCENT */
-  --primary-foreground: #000000;
+  --popover-foreground: #2A002A;
+  --primary: #00FFFF; /* Cyan */
+  --primary-foreground: #2A002A; /* Dark Purple */
   --secondary: #f5f5f5;
-  --secondary-foreground: #000000;
+  --secondary-foreground: #2A002A;
   --muted: #f5f5f5;
   --muted-foreground: #525252;
   --accent: #f5f5f5;
-  --accent-foreground: #000000;
-  --destructive: #FF0000; /* PURE RED */
-  --destructive-foreground: #000000;
-  --border: #000000; /* Black borders */
-  --input: #000000;
-  --ring: #00FF00; /* LIME ACCENT */
+  --accent-foreground: #2A002A;
+  --destructive: #FF00FF; /* Magenta */
+  --destructive-foreground: #000000; /* Black */
+  --border: #2A002A; /* Dark Purple borders */
+  --input: #2A002A;
+  --ring: #00FFFF; /* Cyan */
 
   /* Unused charts */
-  --chart-1: #00ff00;
-  --chart-2: #00ff00;
-  --chart-3: #00ff00;
-  --chart-4: #00ff00;
-  --chart-5: #00ff00;
-  --sidebar: #FFFF00;
-  --sidebar-foreground: #000000;
-  --sidebar-primary: #00ff00;
-  --sidebar-primary-foreground: #000000;
+  --chart-1: #00FFFF;
+  --chart-2: #00FFFF;
+  --chart-3: #00FFFF;
+  --chart-4: #00FFFF;
+  --chart-5: #00FFFF;
+  --sidebar: #FFEBFF;
+  --sidebar-foreground: #2A002A;
+  --sidebar-primary: #00FFFF;
+  --sidebar-primary-foreground: #2A002A;
   --sidebar-accent: #f5f5f5;
-  --sidebar-accent-foreground: #000000;
-  --sidebar-border: #000000;
-  --sidebar-ring: #00ff00;
+  --sidebar-accent-foreground: #2A002A;
+  --sidebar-border: #2A002A;
+  --sidebar-ring: #00FFFF;
 }
 
 .dark {
   --radius: 0rem;
-  --background: #000000; /* Black background */
-  --foreground: #FFFF00; /* YELLOW TEXT */
+  --background: #2A002A; /* Dark Purple */
+  --foreground: #FF00FF; /* Magenta */
   --card: #000000; /* Black cards */
-  --card-foreground: #FFFF00; /* Yellow text on cards */
+  --card-foreground: #FF00FF; /* Magenta text on cards */
   --popover: #000000;
-  --popover-foreground: #FFFF00;
-  --primary: #00FF00; /* LIME ACCENT */
-  --primary-foreground: #000000;
+  --popover-foreground: #FF00FF;
+  --primary: #00FFFF; /* Cyan */
+  --primary-foreground: #000000; /* Black */
   --secondary: #171717;
-  --secondary-foreground: #FFFF00;
+  --secondary-foreground: #FF00FF;
   --muted: #171717;
   --muted-foreground: #a3a3a3;
   --accent: #171717;
-  --accent-foreground: #FFFF00;
-  --destructive: #FF0000; /* PURE RED */
-  --destructive-foreground: #000000;
-  --border: #FFFF00; /* Yellow borders */
-  --input: #FFFF00;
-  --ring: #00FF00; /* LIME ACCENT */
+  --accent-foreground: #FF00FF;
+  --destructive: #FFFF00; /* Bright Yellow */
+  --destructive-foreground: #000000; /* Black */
+  --border: #FF00FF; /* Magenta borders */
+  --input: #FF00FF;
+  --ring: #00FFFF; /* Cyan */
 
   /* Unused charts */
-  --chart-1: #00ff00;
-  --chart-2: #00ff00;
-  --chart-3: #00ff00;
-  --chart-4: #00ff00;
-  --chart-5: #00ff00;
+  --chart-1: #00FFFF;
+  --chart-2: #00FFFF;
+  --chart-3: #00FFFF;
+  --chart-4: #00FFFF;
+  --chart-5: #00FFFF;
   --sidebar: #000000;
-  --sidebar-foreground: #FFFF00;
-  --sidebar-primary: #00ff00;
+  --sidebar-foreground: #FF00FF;
+  --sidebar-primary: #00FFFF;
   --sidebar-primary-foreground: #000000;
   --sidebar-accent: #171717;
-  --sidebar-accent-foreground: #FFFF00;
-  --sidebar-border: #FFFF00;
-  --sidebar-ring: #00ff00;
+  --sidebar-accent-foreground: #FF00FF;
+  --sidebar-border: #FF00FF;
+  --sidebar-ring: #00FFFF;
 }
 
 @layer base {
@@ -154,3 +154,144 @@
   box-shadow: none;
   transform: translate(4px, 4px);
 }
+
+.wallet-adapter-button-trigger:active {
+  box-shadow: none;
+  transform: translate(4px, 4px);
+}
+
+/* MODIFICATION: Add Glitch Animation for Landing Screen */
+.glitch-container {
+  position: relative;
+  text-align: center;
+  color: var(--foreground);
+}
+
+.glitch-text {
+  position: relative;
+  /* Override global "animation: none" for this element */
+  animation: glitch-wave 1s infinite steps(1) !important;
+}
+
+.glitch-text::before,
+.glitch-text::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--background);
+  overflow: hidden;
+  /* Override global "animation: none" for these elements */
+  animation: unset !important;
+}
+
+.glitch-text::before {
+  left: 3px;
+  text-shadow: -2px 0 var(--primary); /* Uses your primary color (Cyan) */
+  animation: glitch-anim-1 2s infinite linear alternate-reverse !important;
+}
+
+.glitch-text::after {
+  left: -3px;
+  text-shadow: -2px 0 var(--destructive); /* Uses your destructive color */
+  animation: glitch-anim-2 1.5s infinite linear alternate-reverse !important;
+}
+
+@keyframes glitch-wave {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(2px, -2px); }
+  50% { transform: translate(-2px, 2px); }
+  75% { transform: translate(2px, 2px); }
+}
+
+@keyframes glitch-anim-1 {
+  0% { clip-path: inset(25% 0 50% 0); }
+  25% { clip-path: inset(10% 0 80% 0); }
+  50% { clip-path: inset(60% 0 10% 0); }
+  75% { clip-path: inset(40% 0 30% 0); }
+  100% { clip-path: inset(70% 0 5% 0); }
+}
+
+@keyframes glitch-anim-2 {
+  0% { clip-path: inset(50% 0 25% 0); }
+  25% { clip-path: inset(80% 0 10% 0); }
+  50% { clip-path: inset(10% 0 60% 0); }
+  75% { clip-path: inset(30% 0 40% 0); }
+  100% { clip-path: inset(5% 0 70% 0); }
+}
+@keyframes glitch-anim-2 {
+  0% { clip-path: inset(50% 0 25% 0); }
+  25% { clip-path: inset(80% 0 10% 0); }
+  50% { clip-path: inset(10% 0 60% 0); }
+  75% { clip-path: inset(30% 0 40% 0); }
+  100% { clip-path: inset(5% 0 70% 0); }
+}
+
+/* MODIFICATION: Add Floating Element Animations */
+.floating-element {
+  position: absolute;
+  font-size: 3rem;
+  font-weight: 900;
+  font-family: var(--font-geist-mono);
+  opacity: 0.9;
+  /* Override global animation block */
+  animation: floating-rotate 3s ease-out forwards !important;
+  text-shadow: 2px 2px 0px var(--foreground);
+}
+
+.floating-yes {
+  color: var(--primary); /* Cyan */
+}
+
+.floating-no {
+  color: var(--destructive); /* Magenta or Yellow, depending on theme */
+}
+
+@keyframes floating-rotate {
+  from {
+    transform: translateY(0) rotate(0deg) scale(1);
+    opacity: 0.9;
+  }
+  to {
+    transform: translateY(-200px) rotate(360deg) scale(1.5);
+    opacity: 0;
+  }
+}
+@keyframes floating-rotate {
+  from {
+    transform: translateY(0) rotate(0deg) scale(1);
+    opacity: 0.9;
+  }
+  to {
+    transform: translateY(-200px) rotate(360deg) scale(1.5);
+    opacity: 0;
+  }
+}
+
+/* MODIFICATION: Add Confetti Animation */
+.confetti-piece {
+  position: absolute;
+  top: -20px; /* Start above screen */
+  width: 10px;
+  height: 16px;
+  opacity: 0.8;
+  /* Override global animation block */
+  animation: drop-confetti 5s ease-in forwards !important;
+}
+
+@keyframes drop-confetti {
+  from {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(110vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+
+
+

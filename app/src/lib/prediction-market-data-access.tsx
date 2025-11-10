@@ -129,10 +129,19 @@ export function usePredictionMarket() {
         .rpc()
 
       // Return both signature and marketPubkey for cache invalidation
-      return { signature, marketPubkey: input.marketPubkey.toString() }
+      // MODIFIED: Also return 'isYes' to trigger the correct floating element
+      return { signature, marketPubkey: input.marketPubkey.toString(), isYes: input.isYes }
     },
-    onSuccess: ({ signature, marketPubkey }) => {
+    onSuccess: ({ signature, marketPubkey, isYes }) => {
+      // MODIFIED: Destructure isYes
       transactionToast(signature)
+
+      // MODIFIED: Dispatch custom event to trigger floating element
+      const event = new CustomEvent('newBuy', {
+        detail: { type: isYes ? 'yes' : 'no' },
+      })
+      document.dispatchEvent(event)
+
       // Invalidate queries to refetch data
       client.invalidateQueries({
         queryKey: ['prediction-market', 'market', marketPubkey],
