@@ -72,7 +72,7 @@ class PredictionMarketBot:
         self.authority_pubkey = self.keypair.pubkey()
         self.groq_client = Groq(api_key=GROQ_API_KEY)
         self.mongo_client = MongoClient(MONGO_URI)
-        self.db = self.mongo_client["cognitomarket"]
+        self.db = self.mongo_client["prediction_market_final"]
         self.markets_collection = self.db["markets"]
         self.history_collection = self.db["market_history"]
 
