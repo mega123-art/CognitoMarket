@@ -497,14 +497,14 @@ pub struct ResolveMarket<'info> {
 #[instruction(market_id: u64)] // <-- Add this to access the arg
 pub struct ClaimWinnings<'info> {
     #[account(
-        seeds = [MARKET_SEED, market.market_id.to_le_bytes().as_ref()],
+        seeds = [MARKET_SEED, market_id.to_le_bytes().as_ref()],
         bump = market.bump
     )]
     pub market: Account<'info, Market>,
 
     #[account(
         mut,
-        seeds = [VAULT_SEED, market.market_id.to_le_bytes().as_ref()],
+        seeds = [VAULT_SEED, market_id.to_le_bytes().as_ref()],
         bump = market.vault_bump
     )]
     /// CHECK: Vault PDA
@@ -515,7 +515,7 @@ pub struct ClaimWinnings<'info> {
         seeds = [
             USER_POSITION_SEED,
             user.key().as_ref(),
-            market.market_id.to_le_bytes().as_ref()
+            market_id.to_le_bytes().as_ref()
         ],
         bump = user_position.bump
     )]

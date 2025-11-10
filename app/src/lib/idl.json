@@ -119,9 +119,8 @@
                 "value": [109, 97, 114, 107, 101, 116]
               },
               {
-                "kind": "account",
-                "path": "market.market_id",
-                "account": "Market"
+                "kind": "arg",
+                "path": "market_id"
               }
             ]
           }
@@ -136,9 +135,8 @@
                 "value": [118, 97, 117, 108, 116]
               },
               {
-                "kind": "account",
-                "path": "market.market_id",
-                "account": "Market"
+                "kind": "arg",
+                "path": "market_id"
               }
             ]
           }
@@ -157,9 +155,8 @@
                 "path": "user"
               },
               {
-                "kind": "account",
-                "path": "market.market_id",
-                "account": "Market"
+                "kind": "arg",
+                "path": "market_id"
               }
             ]
           }
