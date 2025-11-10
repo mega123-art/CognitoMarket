@@ -219,6 +219,8 @@ class PredictionMarketBot:
             
             markets_found = 0
             markets_updated = 0
+            markets_added = 0
+            markets_corrupted = 0
             
             for account_info in response.value:
                 try:
@@ -231,12 +233,15 @@ class PredictionMarketBot:
                     if data[:8] != MARKET_DISCRIMINATOR:
                         continue
                     
+                    # Parse market_id (this should always work)
                     onchain_market_id = struct.unpack('<Q', data[8:16])[0]
                     markets_found += 1
                     
+                    # Check if market exists in database
                     doc = self.markets_collection.find_one({"market_id": onchain_market_id})
                     
                     if doc:
+                        # Update existing market pubkey if needed
                         stored_pubkey = doc.get("market_pubkey")
                         if not stored_pubkey or stored_pubkey != pubkey:
                             self.markets_collection.update_one(
@@ -244,11 +249,89 @@ class PredictionMarketBot:
                                 {"$set": {"market_pubkey": pubkey}}
                             )
                             markets_updated += 1
+                        continue
                     
+                    # Try to parse full market data for new markets
+                    try:
+                        offset = 16
+                        
+                        # Parse question
+                        question_len = struct.unpack_from('<I', data, offset)[0]
+                        offset += 4
+                        question = data[offset:offset+question_len].decode('utf-8')
+                        offset += question_len
+                        
+                        # Parse description
+                        desc_len = struct.unpack_from('<I', data, offset)[0]
+                        offset += 4
+                        description = data[offset:offset+desc_len].decode('utf-8')
+                        offset += desc_len
+                        
+                        # Parse category
+                        cat_len = struct.unpack_from('<I', data, offset)[0]
+                        offset += 4
+                        category = data[offset:offset+cat_len].decode('utf-8')
+                        offset += cat_len
+                        
+                        # Parse resolution_time and resolved status
+                        resolution_time = struct.unpack_from('<q', data, offset)[0]
+                        offset += 8
+                        resolved = bool(struct.unpack_from('<B', data, offset)[0])
+                        offset += 1
+                        
+                        # Parse outcome if resolved
+                        outcome = None
+                        if resolved:
+                            outcome = bool(struct.unpack_from('<B', data, offset)[0])
+                        
+                        # Successfully parsed - add to database
+                        document = {
+                            "market_id": onchain_market_id,
+                            "market_pubkey": pubkey,
+                            "question": question,
+                            "description": description,
+                            "category": category,
+                            "resolution_time": resolution_time,
+                            "created_at": datetime.now(timezone.utc),
+                            "resolved": resolved,
+                            "outcome": outcome,
+                            "resolution_reasoning": "Imported from blockchain" if resolved else None,
+                            "resolved_at": datetime.now(timezone.utc) if resolved else None,
+                            "swept": False
+                        }
+                        
+                        self.markets_collection.insert_one(document)
+                        markets_added += 1
+                        print(f"  Added Market #{onchain_market_id}: {question[:50]}...")
+                        
+                    except:
+                        # Can't parse full data - this is from an old program version
+                        # Mark it as corrupted so we don't try to process it
+                        document = {
+                            "market_id": onchain_market_id,
+                            "market_pubkey": pubkey,
+                            "question": f"[Corrupted Market #{onchain_market_id}]",
+                            "description": "Market from old program version - cannot be parsed",
+                            "category": "Unknown",
+                            "resolution_time": 0,
+                            "created_at": datetime.now(timezone.utc),
+                            "resolved": True,  # Mark as resolved to skip processing
+                            "outcome": None,
+                            "resolution_reasoning": "Market corrupted - created with old program version",
+                            "resolved_at": datetime.now(timezone.utc),
+                            "swept": True  # Mark as swept to skip fund recovery
+                        }
+                        
+                        self.markets_collection.insert_one(document)
+                        markets_added += 1
+                
                 except Exception as e:
+                    # Skip accounts that can't even be read
                     continue
             
             print(f" Scan complete! Found {markets_found} markets")
+            if markets_added > 0:
+                print(f"  - Added {markets_added} new markets to database")
             if markets_updated > 0:
                 print(f"  - Updated {markets_updated} pubkeys")
             print()

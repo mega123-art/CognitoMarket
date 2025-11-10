@@ -10,8 +10,8 @@ import { WalletButton } from '../solana/solana-provider'
 import { BN } from '@coral-xyz/anchor'
 import { Card, CardContent } from '../ui/card'
 import { PublicKey } from '@solana/web3.js'
-import Link from 'next/link' // Added Link import
-import { useMemo } from 'react' // Added useMemo import
+import Link from 'next/link'
+import { useMemo } from 'react'
 
 // Type definitions for better type safety
 interface UserPositionAccount {
@@ -23,7 +23,6 @@ interface UserPositionAccount {
   bump: number
 }
 
-// Added type for the market list
 interface MarketAccount {
   marketId: BN
   // ... other market fields
@@ -40,17 +39,14 @@ interface MarketAccountForClaim {
 }
 
 export function MyPositionsFeature() {
-  // MODIFIED: Fetch getMarkets in addition to getUserPositions
-  // FIX: Removed trailing underscore
   const { getUserPositions, getMarkets } = usePredictionMarket()
   const { publicKey } = useWallet()
 
-  // MODIFIED: Create a map of marketId.toString() -> marketPubkey.toString()
   const marketIdToPubkeyMap = useMemo(() => {
     if (!getMarkets.data) return new Map<string, string>()
 
     const map = new Map<string, string>()
-    // @ts-expect-error Type from anchor
+    // Removed unused @ts-expect-error directive
     getMarkets.data.forEach((market: MarketProp) => {
       const id = market.account.marketId.toString()
       const pk = market.publicKey.toString()
@@ -69,7 +65,6 @@ export function MyPositionsFeature() {
     )
   }
 
-  // MODIFIED: Wait for both queries to load
   if (getUserPositions.isLoading || getMarkets.isLoading) {
     return <div>Loading positions...</div>
   }
@@ -101,17 +96,14 @@ export function MyPositionsFeature() {
             <TableBody>
               {getUserPositions.data?.map((pos: { account: UserPositionAccount; publicKey: PublicKey }) => {
                 const position = pos.account
-                // MODIFIED: Look up the market's public key from the map
                 const marketPubkey = marketIdToPubkeyMap.get(position.marketId.toString())
 
-                // If market not found in map (shouldn't happen), don't render row
                 if (!marketPubkey) {
                   return null
                 }
 
                 return (
                   <TableRow key={pos.publicKey.toString()}>
-                    {/* MODIFIED: Use the correct marketPubkey for the link */}
                     <TableCell>
                       <Button asChild variant="link" className="font-mono p-0 h-auto">
                         <Link href={`/markets/${marketPubkey}`}>{position.marketId.toString()}</Link>
@@ -139,14 +131,14 @@ function ClaimButton({ marketId, position }: { marketId: BN; position: UserPosit
   const { useGetMarket, claimWinnings } = usePredictionMarket()
   const { data: market } = useGetMarket(marketId)
 
-  // @ts-expect-error Type from anchor
+  // Removed unused @ts-expect-error directive
   const marketData = market as MarketAccountForClaim | undefined
 
   const canClaim =
     marketData &&
     marketData.resolved &&
     !position.claimed &&
-    ((marketData.outcome && position.yesShares > 0) || (marketData.outcome === false && position.noShares > 0)) // Check for explicit false
+    ((marketData.outcome && position.yesShares > 0) || (marketData.outcome === false && position.noShares > 0))
 
   const handleClaim = () => {
     claimWinnings.mutateAsync({ marketId })
