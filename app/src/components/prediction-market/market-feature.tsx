@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { Button } from '../ui/button'
 import { AppHero } from '../app-hero'
 import { LAMPORTS_PER_SOL } from '@solana/web3.js'
-import { Key } from 'react'
+import { Key, useMemo } from 'react' // MODIFIED: Import useMemo
 import { cn } from '@/lib/utils' // Import cn utility
 
 // Helper to calculate price
@@ -40,6 +40,22 @@ interface MarketProp {
 export function MarketFeature() {
   const { getMarkets } = usePredictionMarket()
 
+  // MODIFIED: Add useMemo to sort the markets
+  const sortedMarkets = useMemo(() => {
+    if (!getMarkets.data) return []
+
+    // Create a new array to avoid mutating the cached data
+    return [...getMarkets.data].sort((a, b) => {
+      // 1. Prioritize unresolved markets (resolved: false)
+      if (a.account.resolved !== b.account.resolved) {
+        return a.account.resolved ? 1 : -1 // false comes before true
+      }
+
+      // 2. If status is the same, sort by volume (trending) in descending order
+      return Number(b.account.totalVolume - a.account.totalVolume)
+    })
+  }, [getMarkets.data])
+
   return (
     <div>
       {/* MODIFIED: Pass plain strings. AppHero now handles styling. */}
@@ -49,8 +65,8 @@ export function MarketFeature() {
 
       {/* MODIFIED: Increased gap for brutalist layout */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {/* FIX: Use the specific MarketProp type */}
-        {getMarkets.data?.map((market: MarketProp) => {
+        {/* MODIFIED: Map over sortedMarkets instead of getMarkets.data */}
+        {sortedMarkets.map((market: MarketProp) => {
           {
             /* FIX: Remove 'as any' since the type is now correct */
           }

@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-"""
-prediction_market_bot_final_working.py
-
-FINAL FIX: The issue is that Anchor needs the market_id as an instruction parameter
-to validate PDA seeds. We must pass market_id explicitly to resolve_market.
-"""
 
 import json
 import os
@@ -324,6 +318,7 @@ class PredictionMarketBot:
                         
                         self.markets_collection.insert_one(document)
                         markets_added += 1
+                        markets_corrupted += 1
                 
                 except Exception as e:
                     # Skip accounts that can't even be read
@@ -332,6 +327,8 @@ class PredictionMarketBot:
             print(f" Scan complete! Found {markets_found} markets")
             if markets_added > 0:
                 print(f"  - Added {markets_added} new markets to database")
+                if markets_corrupted > 0:
+                    print(f"  - {markets_corrupted} corrupted markets from old program (marked as resolved)")
             if markets_updated > 0:
                 print(f"  - Updated {markets_updated} pubkeys")
             print()
@@ -365,41 +362,121 @@ class PredictionMarketBot:
         except Exception as e:
             print(f" Initialization error: {e}\n")
 
-    def generate_market_idea(self) -> Optional[Dict]:
-        try:
-            prompt = """Generate a prediction market question.
+    def is_similar_question(self, new_question: str, existing_question: str) -> bool:
+        """Check if two questions are too similar."""
+        # Normalize questions for comparison
+        new_norm = new_question.lower().strip().replace("?", "").replace("!", "")
+        existing_norm = existing_question.lower().strip().replace("?", "").replace("!", "")
+        
+        # Exact match
+        if new_norm == existing_norm:
+            return True
+        
+        # Check if one contains the other (for slight variations)
+        if new_norm in existing_norm or existing_norm in new_norm:
+            return True
+        
+        # Check word overlap (simple similarity metric)
+        new_words = set(new_norm.split())
+        existing_words = set(existing_norm.split())
+        
+        if len(new_words) == 0 or len(existing_words) == 0:
+            return False
+        
+        overlap = len(new_words.intersection(existing_words))
+        similarity = overlap / max(len(new_words), len(existing_words))
+        
+        # If 70% or more words match, consider it too similar
+        return similarity >= 0.7
 
+    def check_duplicate_question(self, question: str) -> bool:
+        """Check if a similar question already exists in active markets."""
+        # Check unresolved markets
+        active_markets = self.markets_collection.find({
+            "resolved": False,
+            "question": {"$ne": None}
+        })
+        
+        for market in active_markets:
+            if self.is_similar_question(question, market["question"]):
+                return True
+        
+        # Check recently resolved markets (within last 24 hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
+        recent_markets = self.markets_collection.find({
+            "resolved": True,
+            "resolved_at": {"$gte": cutoff_time},
+            "question": {"$ne": None}
+        })
+        
+        for market in recent_markets:
+            if self.is_similar_question(question, market["question"]):
+                return True
+        
+        return False
+
+    def generate_market_idea(self) -> Optional[Dict]:
+        """Generate a unique prediction market question."""
+        max_attempts = 5
+        
+        for attempt in range(max_attempts):
+            try:
+                # Get list of recent topics to avoid
+                recent_markets = list(self.markets_collection.find(
+                    {"created_at": {"$gte": datetime.now(timezone.utc) - timedelta(days=7)}},
+                    {"question": 1}
+                ).limit(20))
+                
+                recent_topics = [m["question"] for m in recent_markets if m.get("question")]
+                
+                avoid_instruction = ""
+                if recent_topics:
+                    topics_str = "\n".join([f"- {q}" for q in recent_topics[:10]])
+                    avoid_instruction = f"\n\nAVOID these recent topics:\n{topics_str}\n"
+                
+                prompt = f"""Generate a unique prediction market question that hasn't been asked recently.
+
+{avoid_instruction}
 Return ONLY JSON:
-{
+{{
     "question": "Clear yes/no question under 200 characters",
     "description": "Resolution criteria under 1000 characters",
     "category": "Technology, Finance, Sports, Politics, or Entertainment"
-}"""
+}}"""
 
-            response = self.groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.8,
-                max_tokens=500
-            )
+                response = self.groq_client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.8 + (attempt * 0.1),  # Increase randomness on retries
+                    max_tokens=500
+                )
 
-            content = response.choices[0].message.content.strip()
+                content = response.choices[0].message.content.strip()
 
-            if content.startswith("```json"):
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif content.startswith("```"):
-                content = content.split("```")[1].split("```")[0].strip()
+                if content.startswith("```json"):
+                    content = content.split("```json")[1].split("```")[0].strip()
+                elif content.startswith("```"):
+                    content = content.split("```")[1].split("```")[0].strip()
 
-            market_data = json.loads(content)
+                market_data = json.loads(content)
 
-            if not all(k in market_data for k in ["question", "description", "category"]):
-                raise ValueError("Missing required fields")
+                if not all(k in market_data for k in ["question", "description", "category"]):
+                    raise ValueError("Missing required fields")
+                
+                # Check for duplicates
+                if self.check_duplicate_question(market_data["question"]):
+                    print(f"  Duplicate detected (attempt {attempt + 1}/{max_attempts}), regenerating...")
+                    continue
+                
+                return market_data
 
-            return market_data
-
-        except Exception as e:
-            print(f" Market generation error: {e}")
-            return None
+            except Exception as e:
+                print(f"  Market generation error (attempt {attempt + 1}/{max_attempts}): {e}")
+                if attempt < max_attempts - 1:
+                    continue
+        
+        print(f"  Failed to generate unique market after {max_attempts} attempts")
+        return None
 
     async def create_market_onchain(self, market_data: Dict) -> Optional[Dict]:
         try:

@@ -232,10 +232,9 @@ pub mod prediction_market {
         Ok(())
     }
 
-    // CRITICAL FIX: Add market_id parameter for PDA validation
     pub fn resolve_market(
         ctx: Context<ResolveMarket>,
-        market_id: u64,  // <-- Added this parameter
+        market_id: u64, 
         outcome_yes: bool,
     ) -> Result<()> {
         require!(
@@ -417,7 +416,6 @@ pub struct CreateMarket<'info> {
         seeds = [VAULT_SEED, market_id.to_le_bytes().as_ref()],
         bump
     )]
-    /// CHECK: Vault PDA
     pub vault: AccountInfo<'info>,
 
     #[account(mut)]
@@ -446,7 +444,6 @@ pub struct BuyShares<'info> {
         seeds = [VAULT_SEED, market.market_id.to_le_bytes().as_ref()],
         bump = market.vault_bump
     )]
-    /// CHECK: Vault PDA
     pub vault: AccountInfo<'info>,
 
     #[account(
@@ -466,15 +463,13 @@ pub struct BuyShares<'info> {
     pub user: Signer<'info>,
 
     #[account(mut)]
-    /// CHECK: Authority for fee collection
     pub authority: AccountInfo<'info>,
 
     pub system_program: Program<'info, System>,
 }
 
-// CRITICAL FIX: Add market_id as instruction parameter
 #[derive(Accounts)]
-#[instruction(market_id: u64)]  // <-- Added this line
+#[instruction(market_id: u64)]   
 pub struct ResolveMarket<'info> {
     #[account(
         seeds = [b"config"],
@@ -484,7 +479,7 @@ pub struct ResolveMarket<'info> {
 
     #[account(
         mut,
-        seeds = [MARKET_SEED, market_id.to_le_bytes().as_ref()],  // <-- Now uses instruction parameter
+        seeds = [MARKET_SEED, market_id.to_le_bytes().as_ref()],  
         bump = market.bump
     )]
     pub market: Account<'info, Market>,
@@ -494,7 +489,7 @@ pub struct ResolveMarket<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(market_id: u64)] // <-- Add this to access the arg
+#[instruction(market_id: u64)] 
 pub struct ClaimWinnings<'info> {
     #[account(
         seeds = [MARKET_SEED, market_id.to_le_bytes().as_ref()],
@@ -507,7 +502,6 @@ pub struct ClaimWinnings<'info> {
         seeds = [VAULT_SEED, market_id.to_le_bytes().as_ref()],
         bump = market.vault_bump
     )]
-    /// CHECK: Vault PDA
     pub vault: AccountInfo<'info>,
 
     #[account(
@@ -546,7 +540,6 @@ pub struct SweepFunds<'info> {
         seeds = [VAULT_SEED, market.market_id.to_le_bytes().as_ref()],
         bump = market.vault_bump
     )]
-    /// CHECK: Vault PDA
     pub vault: AccountInfo<'info>,
 
     #[account(mut)]
