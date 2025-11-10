@@ -10,7 +10,7 @@ export function AppLayout({ children, links }: { children: ReactNode; links: { l
     // MODIFIED: Remove ClusterProvider wrapper from here
     <div className="flex h-full min-h-screen flex-col">
       <AppHeader links={links} />
-      <main className="flex-grow">{children}</main>
+      <main className="flex-grow max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 w-full">{children}</main>
       <AppFooter />
     </div>
   )
