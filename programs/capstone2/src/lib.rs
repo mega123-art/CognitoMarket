@@ -264,7 +264,7 @@ pub mod prediction_market {
         Ok(())
     }
 
-    pub fn claim_winnings(ctx: Context<ClaimWinnings>) -> Result<()> {
+    pub fn claim_winnings(ctx: Context<ClaimWinnings>,market_id: u64) -> Result<()> {
         let market = &ctx.accounts.market;
         let position = &mut ctx.accounts.user_position;
 
@@ -494,6 +494,7 @@ pub struct ResolveMarket<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(market_id: u64)] // <-- Add this to access the arg
 pub struct ClaimWinnings<'info> {
     #[account(
         seeds = [MARKET_SEED, market.market_id.to_le_bytes().as_ref()],

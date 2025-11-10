@@ -156,7 +156,7 @@ export function usePredictionMarket() {
       const userPositionPda = findUserPositionPDA(input.marketId, publicKey)
 
       const signature = await program.methods
-        .claimWinnings()
+        .claimWinnings(input.marketId)
         .accounts({
           market: marketPda,
           vault: vaultPda,
