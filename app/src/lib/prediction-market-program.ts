@@ -4,7 +4,7 @@ import { PublicKey } from '@solana/web3.js'
 import idl from './idl.json'
 
 // This is the program ID you provided
-export const PREDICTION_MARKET_PROGRAM_ID = new PublicKey('AiCMVwVQAfKmgaLov17UJw6eo4DSCh1FiaEN226ftXa2')
+export const PREDICTION_MARKET_PROGRAM_ID = new PublicKey('AiCM4zr9jku6EjHHyWmqEUKGCuxND1pphfUqwjQeZwG7')
 
 // Helper function to get the program
 export const getPredictionMarketProgram = (provider: AnchorProvider) => {

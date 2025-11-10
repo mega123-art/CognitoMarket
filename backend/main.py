@@ -31,7 +31,7 @@ SOLANA_WS_URL = os.getenv("SOLANA_WS_URL", "wss://api.devnet.solana.com")
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 PRIVATE_KEY_BYTES = os.getenv("PRIVATE_KEY_BYTES")
-PROGRAM_ID_STR = "AiCMVwVQAfKmgaLov17UJw6eo4DSCh1FiaEN226ftXa2"
+PROGRAM_ID_STR = "AiCM4zr9jku6EjHHyWmqEUKGCuxND1pphfUqwjQeZwG7"
 SYSTEM_PROGRAM_ID = Pubkey.from_string("11111111111111111111111111111111")
 
 # Market parameters
@@ -39,14 +39,14 @@ INITIAL_LIQUIDITY_SOL = 0.1
 MARKET_DURATION_MINUTES = 30
 CHECK_INTERVAL_SECONDS = 60
 MARKET_CREATION_INTERVAL_MINUTES = 15
-SWEEP_GRACE_PERIOD_MINUTES = 10
+# SWEEP_GRACE_PERIOD_MINUTES = 10 # No longer used
 
 # Anchor Instruction Discriminators
 DISCRIMINATORS = {
     "initialize": bytes([175, 175, 109, 31, 13, 152, 155, 237]),
     "create_market": bytes([103, 226, 97, 235, 200, 188, 251, 254]),
     "resolve_market": bytes([155, 23, 80, 173, 46, 74, 23, 239]),
-    "sweep_funds": bytes([150, 235, 156, 105, 133, 142, 200, 162]),
+    # "sweep_funds": bytes([150, 235, 156, 105, 133, 142, 200, 162]), # Removed sweep
 }
 
 MARKET_DISCRIMINATOR = bytes([219, 190, 213, 55, 0, 227, 198, 154])
@@ -66,7 +66,7 @@ class PredictionMarketBot:
         self.authority_pubkey = self.keypair.pubkey()
         self.groq_client = Groq(api_key=GROQ_API_KEY)
         self.mongo_client = MongoClient(MONGO_URI)
-        self.db = self.mongo_client["prediction_market_final"]
+        self.db = self.mongo_client["prediction_market_best"]
         self.markets_collection = self.db["markets"]
         self.history_collection = self.db["market_history"]
 
@@ -653,45 +653,45 @@ Return ONLY JSON:
             print(f" Resolution error: {e}")
             return False
 
-    async def sweep_funds_onchain(self, market_id: int) -> bool:
-        try:
-            doc = self.markets_collection.find_one({"market_id": market_id})
-            if not doc or not doc.get("market_pubkey"):
-                return False
-
-            market_pubkey_str = doc.get("market_pubkey")
-            onchain_market_id = await self.read_onchain_market_id(market_pubkey_str)
-            if onchain_market_id is None:
-                return False
-            
-            market_pda = Pubkey.from_string(market_pubkey_str)
-            config_pda, _ = Pubkey.find_program_address([b"config"], self.program_id)
-            vault_pda, _ = Pubkey.find_program_address(
-                [b"vault", onchain_market_id.to_bytes(8, "little")], 
-                self.program_id
-            )
-
-            data = DISCRIMINATORS["sweep_funds"]
-
-            accounts = [
-                AccountMeta(config_pda, is_signer=False, is_writable=False),
-                AccountMeta(market_pda, is_signer=False, is_writable=False),
-                AccountMeta(vault_pda, is_signer=False, is_writable=True),
-                AccountMeta(self.authority_pubkey, is_signer=True, is_writable=True),
-                AccountMeta(SYSTEM_PROGRAM_ID, is_signer=False, is_writable=False),
-            ]
-
-            instruction = Instruction(self.program_id, data, accounts)
-            tx_sig = await self._send_and_confirm_tx(instruction)
-
-            print(f" Swept Market #{market_id}: {tx_sig}")
-            return True
-
-        except Exception as e:
-            if "No remaining funds" in str(e) or "6016" in str(e):
-                return True
-            print(f" Sweep error: {e}")
-            return False
+    # async def sweep_funds_onchain(self, market_id: int) -> bool:
+    #     try:
+    #         doc = self.markets_collection.find_one({"market_id": market_id})
+    #         if not doc or not doc.get("market_pubkey"):
+    #             return False
+    # 
+    #         market_pubkey_str = doc.get("market_pubkey")
+    #         onchain_market_id = await self.read_onchain_market_id(market_pubkey_str)
+    #         if onchain_market_id is None:
+    #             return False
+    #         
+    #         market_pda = Pubkey.from_string(market_pubkey_str)
+    #         config_pda, _ = Pubkey.find_program_address([b"config"], self.program_id)
+    #         vault_pda, _ = Pubkey.find_program_address(
+    #             [b"vault", onchain_market_id.to_bytes(8, "little")], 
+    #             self.program_id
+    #         )
+    # 
+    #         data = DISCRIMINATORS["sweep_funds"]
+    # 
+    #         accounts = [
+    #             AccountMeta(config_pda, is_signer=False, is_writable=False),
+    #             AccountMeta(market_pda, is_signer=False, is_writable=False),
+    #             AccountMeta(vault_pda, is_signer=False, is_writable=True),
+    #             AccountMeta(self.authority_pubkey, is_signer=True, is_writable=True),
+    #             AccountMeta(SYSTEM_PROGRAM_ID, is_signer=False, is_writable=False),
+    #         ]
+    # 
+    #         instruction = Instruction(self.program_id, data, accounts)
+    #         tx_sig = await self._send_and_confirm_tx(instruction)
+    # 
+    #         print(f" Swept Market #{market_id}: {tx_sig}")
+    #         return True
+    # 
+    #     except Exception as e:
+    #         if "No remaining funds" in str(e) or "6016" in str(e):
+    #             return True
+    #         print(f" Sweep error: {e}")
+    #         return False
 
     def _parse_buy_shares_event(self, log_data: str):
         try:
@@ -853,22 +853,22 @@ Return ONLY JSON:
                     }
                 )
 
-        # Sweep funds
-        sweep_cutoff = current_time - timedelta(minutes=SWEEP_GRACE_PERIOD_MINUTES)
-        markets_to_sweep = self.markets_collection.find({
-            "resolved": True,
-            "swept": False,
-            "resolved_at": {"$lte": sweep_cutoff}
-        })
-
-        for market in markets_to_sweep:
-            print(f"\n Sweeping Market #{market['market_id']}")
-            success = await self.sweep_funds_onchain(market["market_id"])
-            if success:
-                self.markets_collection.update_one(
-                    {"market_id": market["market_id"]},
-                    {"$set": {"swept": True}}
-                )
+        # # Sweep funds - This logic is now commented out
+        # sweep_cutoff = current_time - timedelta(minutes=SWEEP_GRACE_PERIOD_MINUTES)
+        # markets_to_sweep = self.markets_collection.find({
+        #     "resolved": True,
+        #     "swept": False,
+        #     "resolved_at": {"$lte": sweep_cutoff}
+        # })
+        # 
+        # for market in markets_to_sweep:
+        #     print(f"\n Sweeping Market #{market['market_id']}")
+        #     success = await self.sweep_funds_onchain(market["market_id"])
+        #     if success:
+        #         self.markets_collection.update_one(
+        #             {"market_id": market["market_id"]},
+        #             {"$set": {"swept": True}}
+        #         )
 
     async def run_resolution_loop(self):
         print(f" Resolution loop active\n")

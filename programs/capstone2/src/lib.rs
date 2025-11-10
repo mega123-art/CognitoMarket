@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-declare_id!("AiCMVwVQAfKmgaLov17UJw6eo4DSCh1FiaEN226ftXa2");
+declare_id!("AiCM4zr9jku6EjHHyWmqEUKGCuxND1pphfUqwjQeZwG7");
 
 const MARKET_SEED: &[u8] = b"market";
 const VAULT_SEED: &[u8] = b"vault";
@@ -385,7 +385,7 @@ pub struct Initialize<'info> {
         bump
     )]
     pub config: Account<'info, Config>,
-    
+    /// CHECK: This is the market's vault PDA, validated by seeds.   
     #[account(mut)]
     pub authority: Signer<'info>,
     
@@ -410,14 +410,15 @@ pub struct CreateMarket<'info> {
         bump
     )]
     pub market: Account<'info, Market>,
-
+    /// CHECK: This is the market's vault PDA, validated by seeds.
     #[account(
         mut,
         seeds = [VAULT_SEED, market_id.to_le_bytes().as_ref()],
         bump
     )]
+    
     pub vault: AccountInfo<'info>,
-
+    /// CHECK: This is the market's vault PDA, validated by seeds.
     #[account(mut)]
     pub authority: Signer<'info>,
 
@@ -438,7 +439,7 @@ pub struct BuyShares<'info> {
         bump = market.bump
     )]
     pub market: Account<'info, Market>,
-
+    /// CHECK: This is the market's vault PDA, validated by seeds.
     #[account(
         mut,
         seeds = [VAULT_SEED, market.market_id.to_le_bytes().as_ref()],
@@ -461,7 +462,7 @@ pub struct BuyShares<'info> {
 
     #[account(mut)]
     pub user: Signer<'info>,
-
+    /// CHECK: This is the market's vault PDA, validated by seeds.
     #[account(mut)]
     pub authority: AccountInfo<'info>,
 
@@ -483,7 +484,7 @@ pub struct ResolveMarket<'info> {
         bump = market.bump
     )]
     pub market: Account<'info, Market>,
-
+    /// CHECK: This is the market's vault PDA, validated by seeds.
     #[account(mut)]
     pub authority: Signer<'info>,
 }
@@ -497,6 +498,7 @@ pub struct ClaimWinnings<'info> {
     )]
     pub market: Account<'info, Market>,
 
+    /// CHECK: This is the market's vault PDA, validated by seeds.
     #[account(
         mut,
         seeds = [VAULT_SEED, market_id.to_le_bytes().as_ref()],
@@ -534,14 +536,14 @@ pub struct SweepFunds<'info> {
         bump = market.bump
     )]
     pub market: Account<'info, Market>,
-
+    /// CHECK: This is the market's vault PDA, validated by seeds.
     #[account(
         mut,
         seeds = [VAULT_SEED, market.market_id.to_le_bytes().as_ref()],
         bump = market.vault_bump
     )]
     pub vault: AccountInfo<'info>,
-
+    /// CHECK: This is the market's vault PDA, validated by seeds.
     #[account(mut)]
     pub authority: Signer<'info>,
 
