@@ -123,7 +123,7 @@
     @apply border-border outline-ring/50;
     /* Brutalism: NO transitions */
     transition: none !important;
-    animation: none !important;
+    
   }
 
   body {
