@@ -16,6 +16,7 @@ const CONFIG_SEED = Buffer.from('config')
 const MARKET_SEED = Buffer.from('market')
 const VAULT_SEED = Buffer.from('vault')
 const USER_POSITION_SEED = Buffer.from('position')
+const FEE_VAULT_SEED = Buffer.from('fee_vault') // <-- FIX 1: Add FEE_VAULT_SEED
 
 export function usePredictionMarket() {
   const { cluster } = useCluster()
@@ -27,6 +28,8 @@ export function usePredictionMarket() {
 
   // Find PDAs
   const [configPda] = PublicKey.findProgramAddressSync([CONFIG_SEED], program.programId)
+  // <-- FIX 2: Add feeVaultPda derivation -->
+  const [feeVaultPda] = PublicKey.findProgramAddressSync([FEE_VAULT_SEED], program.programId)
 
   const findMarketPDAs = (marketId: BN) => {
     const marketIdBytes = marketId.toArrayLike(Buffer, 'le', 8)
@@ -46,7 +49,7 @@ export function usePredictionMarket() {
 
   // === QUERIES ===
 
-  // Get all markets
+  // Get all markets (THIS IS THE MISSING PIECE)
   const getMarkets = useQuery({
     queryKey: ['prediction-market', 'all-markets', { cluster }],
     // @ts-expect-error Anchor IDL type inference issue
@@ -111,7 +114,7 @@ export function usePredictionMarket() {
       const { vaultPda } = findMarketPDAs(marketId)
       const userPositionPda = findUserPositionPDA(marketId, publicKey)
 
-      // We need the authority from the config account to receive fees
+      // Config account is still needed for its bump seeds, but not authority
       // @ts-expect-error Anchor IDL type inference issue
       const config = await program.account.config.fetch(configPda)
 
@@ -121,9 +124,10 @@ export function usePredictionMarket() {
           config: configPda,
           market: input.marketPubkey, // Use the actual pubkey, not derived PDA
           vault: vaultPda,
+          feeVault: feeVaultPda, // <-- FIX 3: Add feeVault
           userPosition: userPositionPda,
           user: publicKey,
-          authority: config.authority, // Fee receiver
+          // authority: config.authority, // <-- FIX 4: Remove authority
           systemProgram: SystemProgram.programId,
         })
         .rpc()
@@ -165,7 +169,7 @@ export function usePredictionMarket() {
       const userPositionPda = findUserPositionPDA(input.marketId, publicKey)
 
       const signature = await program.methods
-        .claimWinnings(input.marketId)
+        .claimWinnings() // <-- FIX 5: Remove marketId argument
         .accounts({
           market: marketPda,
           vault: vaultPda,
@@ -189,7 +193,7 @@ export function usePredictionMarket() {
 
   return {
     program,
-    getMarkets,
+    getMarkets, // <-- FIX 6: Ensure getMarkets is returned
     useGetMarket,
     useGetMarketByPubkey,
     getUserPositions,
