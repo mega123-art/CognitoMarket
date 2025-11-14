@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
 
-declare_id!("AiCM4zr9jku6EjHHyWmqEUKGCuxND1pphfUqwjQeZwG7");
+declare_id!("CogMJfnjfbzfZ1oYterCgGB6yQGro6rLf164VbzZEDsw");
 
 const MARKET_SEED: &[u8] = b"market";
 const VAULT_SEED: &[u8] = b"vault";
