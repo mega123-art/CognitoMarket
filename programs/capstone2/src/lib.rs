@@ -1,10 +1,13 @@
 use anchor_lang::prelude::*;
+use anchor_lang::system_program;
 
 declare_id!("AiCM4zr9jku6EjHHyWmqEUKGCuxND1pphfUqwjQeZwG7");
 
 const MARKET_SEED: &[u8] = b"market";
 const VAULT_SEED: &[u8] = b"vault";
 const USER_POSITION_SEED: &[u8] = b"position";
+const FEE_VAULT_SEED: &[u8] = b"fee_vault";
+const PRECISION: u128 = 1_000_000_000; // 9 decimal precision for AMM calculations
 
 #[program]
 pub mod prediction_market {
@@ -16,8 +19,23 @@ pub mod prediction_market {
         config.market_count = 0;
         config.fee_percentage = 200;
         config.bump = ctx.bumps.config;
+        config.fee_vault_bump = ctx.bumps.fee_vault;
+
+        // Initialize fee vault by transferring rent-exempt minimum
+        let rent = Rent::get()?;
+        let min_rent = rent.minimum_balance(0);
         
+        let cpi_context = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.authority.to_account_info(),
+                to: ctx.accounts.fee_vault.to_account_info(),
+            },
+        );
+        system_program::transfer(cpi_context, min_rent)?;
+
         msg!("Prediction market initialized with authority: {}", config.authority);
+        msg!("Fee vault initialized at: {}", ctx.accounts.fee_vault.key());
         Ok(())
     }
 
@@ -34,7 +52,7 @@ pub mod prediction_market {
             ctx.accounts.authority.key() == ctx.accounts.config.authority,
             ErrorCode::Unauthorized
         );
-        
+
         require!(question.len() <= 200, ErrorCode::QuestionTooLong);
         require!(description.len() <= 1000, ErrorCode::DescriptionTooLong);
         require!(category.len() <= 50, ErrorCode::CategoryTooLong);
@@ -58,9 +76,16 @@ pub mod prediction_market {
         market.initial_liquidity = initial_liquidity_lamports;
         market.yes_liquidity = initial_liquidity_lamports;
         market.no_liquidity = initial_liquidity_lamports;
+        
+        // High-precision k constant
         market.k_constant = (initial_liquidity_lamports as u128)
+            .checked_mul(PRECISION)
+            .ok_or(ErrorCode::MathOverflow)?
             .checked_mul(initial_liquidity_lamports as u128)
+            .ok_or(ErrorCode::MathOverflow)?
+            .checked_mul(PRECISION)
             .ok_or(ErrorCode::MathOverflow)?;
+            
         market.total_volume = 0;
         market.resolved = false;
         market.outcome = None;
@@ -69,19 +94,15 @@ pub mod prediction_market {
         market.bump = ctx.bumps.market;
         market.vault_bump = ctx.bumps.vault;
 
-        let ix = anchor_lang::solana_program::system_instruction::transfer(
-            &ctx.accounts.authority.key(),
-            &ctx.accounts.vault.key(),
-            initial_liquidity_lamports * 2,
+        // Transfer initial liquidity to vault PDA
+        let cpi_context = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.authority.to_account_info(),
+                to: ctx.accounts.vault.to_account_info(),
+            },
         );
-        anchor_lang::solana_program::program::invoke(
-            &ix,
-            &[
-                ctx.accounts.authority.to_account_info(),
-                ctx.accounts.vault.to_account_info(),
-                ctx.accounts.system_program.to_account_info(),
-            ],
-        )?;
+        system_program::transfer(cpi_context, initial_liquidity_lamports * 2)?;
 
         let config = &mut ctx.accounts.config;
         config.market_count += 1;
@@ -97,7 +118,7 @@ pub mod prediction_market {
         min_shares_out: u64,
     ) -> Result<()> {
         let market = &mut ctx.accounts.market;
-        
+
         require!(!market.resolved, ErrorCode::MarketResolved);
         require!(
             Clock::get()?.unix_timestamp < market.resolution_time,
@@ -110,70 +131,85 @@ pub mod prediction_market {
             .ok_or(ErrorCode::MathOverflow)?
             .checked_div(10000)
             .ok_or(ErrorCode::MathOverflow)?;
-        
+
         let amount_after_fee = amount_lamports
             .checked_sub(fee)
             .ok_or(ErrorCode::MathOverflow)?;
 
+        // High-precision AMM calculation
         let (shares_out, new_yes_liquidity, new_no_liquidity) = if is_yes {
-            let new_yes = market.yes_liquidity
-                .checked_add(amount_after_fee)
+            let new_yes_with_precision = (market.yes_liquidity as u128)
+                .checked_mul(PRECISION)
+                .ok_or(ErrorCode::MathOverflow)?
+                .checked_add((amount_after_fee as u128).checked_mul(PRECISION).ok_or(ErrorCode::MathOverflow)?)
                 .ok_or(ErrorCode::MathOverflow)?;
-            
-            let new_no = market.k_constant
-                .checked_div(new_yes as u128)
-                .ok_or(ErrorCode::MathOverflow)? as u64;
-            
-            let shares = market.no_liquidity
-                .checked_sub(new_no)
+
+            let new_no_with_precision = market.k_constant
+                .checked_div(new_yes_with_precision)
+                .ok_or(ErrorCode::MathOverflow)?;
+
+            let new_yes = (new_yes_with_precision / PRECISION) as u64;
+            let new_no = (new_no_with_precision / PRECISION) as u64;
+
+            let old_no_with_precision = (market.no_liquidity as u128)
+                .checked_mul(PRECISION)
+                .ok_or(ErrorCode::MathOverflow)?;
+
+            let shares_with_precision = old_no_with_precision
+                .checked_sub(new_no_with_precision)
                 .ok_or(ErrorCode::InsufficientLiquidity)?;
-            
+
+            let shares = (shares_with_precision / PRECISION) as u64;
+
             (shares, new_yes, new_no)
         } else {
-            let new_no = market.no_liquidity
-                .checked_add(amount_after_fee)
+            let new_no_with_precision = (market.no_liquidity as u128)
+                .checked_mul(PRECISION)
+                .ok_or(ErrorCode::MathOverflow)?
+                .checked_add((amount_after_fee as u128).checked_mul(PRECISION).ok_or(ErrorCode::MathOverflow)?)
                 .ok_or(ErrorCode::MathOverflow)?;
-            
-            let new_yes = market.k_constant
-                .checked_div(new_no as u128)
-                .ok_or(ErrorCode::MathOverflow)? as u64;
-            
-            let shares = market.yes_liquidity
-                .checked_sub(new_yes)
+
+            let new_yes_with_precision = market.k_constant
+                .checked_div(new_no_with_precision)
+                .ok_or(ErrorCode::MathOverflow)?;
+
+            let new_yes = (new_yes_with_precision / PRECISION) as u64;
+            let new_no = (new_no_with_precision / PRECISION) as u64;
+
+            let old_yes_with_precision = (market.yes_liquidity as u128)
+                .checked_mul(PRECISION)
+                .ok_or(ErrorCode::MathOverflow)?;
+
+            let shares_with_precision = old_yes_with_precision
+                .checked_sub(new_yes_with_precision)
                 .ok_or(ErrorCode::InsufficientLiquidity)?;
-            
+
+            let shares = (shares_with_precision / PRECISION) as u64;
+
             (shares, new_yes, new_no)
         };
 
         require!(shares_out >= min_shares_out, ErrorCode::SlippageExceeded);
 
-        let fee_ix = anchor_lang::solana_program::system_instruction::transfer(
-            &ctx.accounts.user.key(),
-            &ctx.accounts.authority.key(),
-            fee,
+        // Send fees to protocol fee vault
+        let fee_cpi = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.user.to_account_info(),
+                to: ctx.accounts.fee_vault.to_account_info(),
+            },
         );
-        anchor_lang::solana_program::program::invoke(
-            &fee_ix,
-            &[
-                ctx.accounts.user.to_account_info(),
-                ctx.accounts.authority.to_account_info(),
-                ctx.accounts.system_program.to_account_info(),
-            ],
-        )?;
+        system_program::transfer(fee_cpi, fee)?;
 
-        let net_ix = anchor_lang::solana_program::system_instruction::transfer(
-            &ctx.accounts.user.key(),
-            &ctx.accounts.vault.key(),
-            amount_after_fee,
+        // Transfer net amount to market vault
+        let net_cpi = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.user.to_account_info(),
+                to: ctx.accounts.vault.to_account_info(),
+            },
         );
-        anchor_lang::solana_program::program::invoke(
-            &net_ix,
-            &[
-                ctx.accounts.user.to_account_info(),
-                ctx.accounts.vault.to_account_info(),
-                ctx.accounts.system_program.to_account_info(),
-            ],
-        )?;
+        system_program::transfer(net_cpi, amount_after_fee)?;
 
         market.yes_liquidity = new_yes_liquidity;
         market.no_liquidity = new_no_liquidity;
@@ -234,7 +270,6 @@ pub mod prediction_market {
 
     pub fn resolve_market(
         ctx: Context<ResolveMarket>,
-        market_id: u64, 
         outcome_yes: bool,
     ) -> Result<()> {
         require!(
@@ -243,8 +278,8 @@ pub mod prediction_market {
         );
 
         let market = &mut ctx.accounts.market;
-        
-        require!(!market.resolved, ErrorCode::MarketResolved); 
+
+        require!(!market.resolved, ErrorCode::MarketResolved);
         require!(
             Clock::get()?.unix_timestamp >= market.resolution_time,
             ErrorCode::MarketNotExpired
@@ -263,15 +298,20 @@ pub mod prediction_market {
         Ok(())
     }
 
-    pub fn claim_winnings(ctx: Context<ClaimWinnings>,market_id: u64) -> Result<()> {
-        let market = &ctx.accounts.market;
+    pub fn claim_winnings(ctx: Context<ClaimWinnings>) -> Result<()> {
+        let market = &mut ctx.accounts.market;
         let position = &mut ctx.accounts.user_position;
+
+        require!(
+            position.user == ctx.accounts.user.key(),
+            ErrorCode::Unauthorized
+        );
 
         require!(market.resolved, ErrorCode::MarketNotResolved);
         require!(!position.claimed, ErrorCode::AlreadyClaimed);
-        
+
         let outcome_yes = market.outcome.ok_or(ErrorCode::MarketNotResolved)?;
-        
+
         let winning_shares = if outcome_yes {
             position.yes_shares
         } else {
@@ -289,19 +329,19 @@ pub mod prediction_market {
         require!(total_winning_shares_u128 > 0, ErrorCode::NoWinningShares);
 
         let vault_balance = ctx.accounts.vault.lamports();
-        
+
         let payout = (winning_shares as u128)
             .checked_mul(vault_balance as u128)
             .ok_or(ErrorCode::MathOverflow)?
             .checked_div(total_winning_shares_u128)
             .ok_or(ErrorCode::MathOverflow)?;
-        
+
         let payout = payout as u64;
 
         require!(payout > 0, ErrorCode::NoWinningShares);
-        
-        let market_id_bytes = market.market_id.to_le_bytes(); 
-        
+
+        let market_id_bytes = market.market_id.to_le_bytes();
+
         let seeds = &[
             VAULT_SEED,
             market_id_bytes.as_ref(),
@@ -325,6 +365,16 @@ pub mod prediction_market {
             signer,
         )?;
 
+        if outcome_yes {
+            market.total_yes_shares = market.total_yes_shares
+                .checked_sub(winning_shares as u128)
+                .ok_or(ErrorCode::MathOverflow)?;
+        } else {
+            market.total_no_shares = market.total_no_shares
+                .checked_sub(winning_shares as u128)
+                .ok_or(ErrorCode::MathOverflow)?;
+        }
+
         position.yes_shares = 0;
         position.no_shares = 0;
         position.claimed = true;
@@ -333,7 +383,43 @@ pub mod prediction_market {
 
         Ok(())
     }
-    
+
+    pub fn withdraw_fees(ctx: Context<WithdrawFees>, amount: u64) -> Result<()> {
+        require!(
+            ctx.accounts.authority.key() == ctx.accounts.config.authority,
+            ErrorCode::Unauthorized
+        );
+
+        let fee_vault_balance = ctx.accounts.fee_vault.lamports();
+        require!(amount <= fee_vault_balance, ErrorCode::InsufficientFunds);
+
+        let seeds = &[
+            FEE_VAULT_SEED,
+            &[ctx.accounts.config.fee_vault_bump],
+        ];
+        let signer = &[&seeds[..]];
+
+        let transfer_ix = anchor_lang::solana_program::system_instruction::transfer(
+            ctx.accounts.fee_vault.key,
+            ctx.accounts.authority.key,
+            amount,
+        );
+
+        anchor_lang::solana_program::program::invoke_signed(
+            &transfer_ix,
+            &[
+                ctx.accounts.fee_vault.to_account_info(),
+                ctx.accounts.authority.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
+            ],
+            signer,
+        )?;
+
+        msg!("Authority withdrew {} lamports in fees", amount);
+
+        Ok(())
+    }
+
     pub fn sweep_funds(ctx: Context<SweepFunds>) -> Result<()> {
         require!(
             ctx.accounts.authority.key() == ctx.accounts.config.authority,
@@ -341,9 +427,11 @@ pub mod prediction_market {
         );
 
         let market = &ctx.accounts.market;
+
         require!(market.resolved, ErrorCode::MarketNotResolved);
 
-        let vault_balance = ctx.accounts.vault.to_account_info().lamports();
+        let vault_balance = ctx.accounts.vault.lamports();
+        
         require!(vault_balance > 0, ErrorCode::NoRemainingFunds);
 
         let market_id_bytes = market.market_id.to_le_bytes();
@@ -355,12 +443,14 @@ pub mod prediction_market {
         ];
         let signer = &[&seeds[..]];
 
+        let transfer_ix = anchor_lang::solana_program::system_instruction::transfer(
+            ctx.accounts.vault.key,
+            ctx.accounts.authority.key,
+            vault_balance,
+        );
+
         anchor_lang::solana_program::program::invoke_signed(
-            &anchor_lang::solana_program::system_instruction::transfer(
-                ctx.accounts.vault.key,
-                ctx.accounts.authority.key,
-                vault_balance,
-            ),
+            &transfer_ix,
             &[
                 ctx.accounts.vault.to_account_info(),
                 ctx.accounts.authority.to_account_info(),
@@ -369,12 +459,17 @@ pub mod prediction_market {
             signer,
         )?;
 
-        msg!("Authority swept {} lamports from Market #{} vault.", vault_balance, market.market_id);
+        msg!(
+            "Authority swept {} lamports from market #{}", 
+            vault_balance, 
+            market.market_id
+        );
 
         Ok(())
     }
 }
 
+// CORRECT FIX: Use UncheckedAccount and manually initialize in the function
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(
@@ -385,10 +480,18 @@ pub struct Initialize<'info> {
         bump
     )]
     pub config: Account<'info, Config>,
-    /// CHECK: This is the market's vault PDA, validated by seeds.   
+
+    /// CHECK: Fee vault PDA - manually initialized in initialize() function
+    #[account(
+        mut,
+        seeds = [FEE_VAULT_SEED],
+        bump
+    )]
+    pub fee_vault: UncheckedAccount<'info>,
+
     #[account(mut)]
     pub authority: Signer<'info>,
-    
+
     pub system_program: Program<'info, System>,
 }
 
@@ -410,15 +513,15 @@ pub struct CreateMarket<'info> {
         bump
     )]
     pub market: Account<'info, Market>,
-    /// CHECK: This is the market's vault PDA, validated by seeds.
+
+    /// CHECK: Vault PDA - will be funded with initial liquidity
     #[account(
         mut,
         seeds = [VAULT_SEED, market_id.to_le_bytes().as_ref()],
         bump
     )]
-    
-    pub vault: AccountInfo<'info>,
-    /// CHECK: This is the market's vault PDA, validated by seeds.
+    pub vault: UncheckedAccount<'info>,
+
     #[account(mut)]
     pub authority: Signer<'info>,
 
@@ -439,13 +542,22 @@ pub struct BuyShares<'info> {
         bump = market.bump
     )]
     pub market: Account<'info, Market>,
-    /// CHECK: This is the market's vault PDA, validated by seeds.
+
+    /// CHECK: Vault PDA validated by seeds
     #[account(
         mut,
         seeds = [VAULT_SEED, market.market_id.to_le_bytes().as_ref()],
         bump = market.vault_bump
     )]
-    pub vault: AccountInfo<'info>,
+    pub vault: UncheckedAccount<'info>,
+
+    /// CHECK: Fee vault PDA validated by seeds - initialized in initialize()
+    #[account(
+        mut,
+        seeds = [FEE_VAULT_SEED],
+        bump = config.fee_vault_bump
+    )]
+    pub fee_vault: UncheckedAccount<'info>,
 
     #[account(
         init_if_needed,
@@ -462,15 +574,11 @@ pub struct BuyShares<'info> {
 
     #[account(mut)]
     pub user: Signer<'info>,
-    /// CHECK: This is the market's vault PDA, validated by seeds.
-    #[account(mut)]
-    pub authority: AccountInfo<'info>,
 
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
-#[instruction(market_id: u64)]   
 pub struct ResolveMarket<'info> {
     #[account(
         seeds = [b"config"],
@@ -480,38 +588,38 @@ pub struct ResolveMarket<'info> {
 
     #[account(
         mut,
-        seeds = [MARKET_SEED, market_id.to_le_bytes().as_ref()],  
+        seeds = [MARKET_SEED, market.market_id.to_le_bytes().as_ref()],
         bump = market.bump
     )]
     pub market: Account<'info, Market>,
-    /// CHECK: This is the market's vault PDA, validated by seeds.
+
     #[account(mut)]
     pub authority: Signer<'info>,
 }
 
 #[derive(Accounts)]
-#[instruction(market_id: u64)] 
 pub struct ClaimWinnings<'info> {
     #[account(
-        seeds = [MARKET_SEED, market_id.to_le_bytes().as_ref()],
+        mut,
+        seeds = [MARKET_SEED, user_position.market_id.to_le_bytes().as_ref()],
         bump = market.bump
     )]
     pub market: Account<'info, Market>,
 
-    /// CHECK: This is the market's vault PDA, validated by seeds.
+    /// CHECK: Vault PDA validated by seeds
     #[account(
         mut,
-        seeds = [VAULT_SEED, market_id.to_le_bytes().as_ref()],
+        seeds = [VAULT_SEED, user_position.market_id.to_le_bytes().as_ref()],
         bump = market.vault_bump
     )]
-    pub vault: AccountInfo<'info>,
+    pub vault: UncheckedAccount<'info>,
 
     #[account(
         mut,
         seeds = [
             USER_POSITION_SEED,
             user.key().as_ref(),
-            market_id.to_le_bytes().as_ref()
+            user_position.market_id.to_le_bytes().as_ref()
         ],
         bump = user_position.bump
     )]
@@ -519,6 +627,28 @@ pub struct ClaimWinnings<'info> {
 
     #[account(mut)]
     pub user: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct WithdrawFees<'info> {
+    #[account(
+        seeds = [b"config"],
+        bump = config.bump
+    )]
+    pub config: Account<'info, Config>,
+
+    /// CHECK: Fee vault PDA validated by seeds
+    #[account(
+        mut,
+        seeds = [FEE_VAULT_SEED],
+        bump = config.fee_vault_bump
+    )]
+    pub fee_vault: UncheckedAccount<'info>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
 
     pub system_program: Program<'info, System>,
 }
@@ -536,14 +666,15 @@ pub struct SweepFunds<'info> {
         bump = market.bump
     )]
     pub market: Account<'info, Market>,
-    /// CHECK: This is the market's vault PDA, validated by seeds.
+
+    /// CHECK: Vault PDA validated by seeds
     #[account(
         mut,
         seeds = [VAULT_SEED, market.market_id.to_le_bytes().as_ref()],
         bump = market.vault_bump
     )]
-    pub vault: AccountInfo<'info>,
-    /// CHECK: This is the market's vault PDA, validated by seeds.
+    pub vault: UncheckedAccount<'info>,
+
     #[account(mut)]
     pub authority: Signer<'info>,
 
@@ -556,10 +687,11 @@ pub struct Config {
     pub market_count: u64,
     pub fee_percentage: u16,
     pub bump: u8,
+    pub fee_vault_bump: u8,
 }
 
 impl Config {
-    pub const LEN: usize = 32 + 8 + 2 + 1;
+    pub const LEN: usize = 32 + 8 + 2 + 1 + 1;
 }
 
 #[account]
@@ -585,8 +717,8 @@ pub struct Market {
 }
 
 impl Market {
-    pub const LEN: usize = 8 + 32 + (4 + 200) + (4 + 1000) + (4 + 50) 
-        + 8 + 8 + 8 + 8 + 16 + 8 + 1 + (1 + 1) 
+    pub const LEN: usize = 8 + 32 + (4 + 200) + (4 + 1000) + (4 + 50)
+        + 8 + 8 + 8 + 8 + 16 + 8 + 1 + (1 + 1)
         + 16 + 16
         + 1 + 1;
 }
@@ -641,6 +773,8 @@ pub enum ErrorCode {
     AlreadyClaimed,
     #[msg("No remaining funds")]
     NoRemainingFunds,
+    #[msg("Insufficient funds")]
+    InsufficientFunds,
 }
 
 #[event]
