@@ -1,4 +1,4 @@
-// app/src/app/api/history/[marketPubkey]/route.ts
+// src/app/api/history/[marketPubkey]/route.ts
 export const dynamic = 'force-dynamic'
 
 import { MongoClient } from 'mongodb'
@@ -22,15 +22,16 @@ async function connectToDatabase() {
   return client.db('prediction_market_again') // Use your DB name
 }
 
-// --- THIS IS THE FIX ---
-// We changed the function signature from:
-// (request: Request, { params }: { params: { marketPubkey: string } })
-// to:
-// (request: Request, context: { params: { marketPubkey: string } })
-// ...and then we destructure `params` *inside* the function.
-export async function GET(request: Request, context: { params: { marketPubkey: string } }) {
-  const { marketPubkey } = context.params
-  // --- END OF FIX ---
+// --- FIX: Define an explicit interface for the context object ---
+interface RouteContext {
+  params: {
+    marketPubkey: string
+  }
+}
+
+// We use the explicit interface for the second argument
+export async function GET(request: Request, context: RouteContext) {
+  const marketPubkey = context.params.marketPubkey
 
   if (!marketPubkey) {
     return NextResponse.json({ error: 'Market Pubkey is required' }, { status: 400 })
