@@ -1,4 +1,4 @@
-// app/src/components/prediction-market/market-price-chart.tsx
+// src/components/prediction-market/market-price-chart.tsx
 'use client'
 
 import React from 'react'
@@ -11,7 +11,6 @@ import { Card } from '@/components/ui/card'
 
 // Define the structure of our history data returned from your API route
 type PriceHistoryPoint = {
-  // We expect a string because JSON.stringify and BigInt conversion
   timestamp: string
   yes_liquidity: string
   no_liquidity: string
@@ -57,8 +56,23 @@ function formatData(data: PriceHistoryPoint[]): ChartDataPoint[] {
   })
 }
 
+// --- FIX: Explicit interface for Recharts Tooltip Payload (Fixes ESLint error) ---
+interface TooltipPayloadItem {
+  dataKey: 'yesPrice' | 'noPrice'
+  value: number
+  // Recharts adds more properties, but these are sufficient for our usage
+}
+
 // --- 2. Custom Tooltip ---
-const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: any[]; label?: string | number }) => {
+const CustomTooltip = ({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean
+  payload?: TooltipPayloadItem[] // <-- FIXED: Using the specific interface
+  label?: string | number
+}) => {
   if (active && payload?.length) {
     const yes = payload.find((p) => p.dataKey === 'yesPrice')?.value ?? 0
     const no = payload.find((p) => p.dataKey === 'noPrice')?.value ?? 0
@@ -66,6 +80,7 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
     return (
       <Card className="bg-background border-2 border-foreground shadow-[4px_4px_0px_var(--border)] p-2">
         <p className="font-mono font-bold">{`Time: ${label}`}</p>
+        {/* We format the 0-1 price to cents (0-100) here */}
         <p className="font-mono text-primary">{`YES: ${(yes * 100).toFixed(2)}¢`}</p>
         <p className="font-mono text-destructive">{`NO: ${(no * 100).toFixed(2)}¢`}</p>
       </Card>
@@ -155,7 +170,7 @@ export function MarketPriceChart({ marketPubkey }: { marketPubkey: PublicKey | n
             dataKey="yesPrice"
             stroke="var(--primary)"
             strokeWidth={3}
-            dot={true} // <-- FIX: Always show the dot so users see data
+            dot={true}
             activeDot={{
               stroke: 'var(--background)',
               strokeWidth: 2,
@@ -168,7 +183,7 @@ export function MarketPriceChart({ marketPubkey }: { marketPubkey: PublicKey | n
             dataKey="noPrice"
             stroke="var(--destructive)"
             strokeWidth={3}
-            dot={true} // <-- FIX: Always show the dot so users see data
+            dot={true}
             activeDot={{
               stroke: 'var(--background)',
               strokeWidth: 2,
