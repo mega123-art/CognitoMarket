@@ -1,5 +1,5 @@
 {
-  "address": "CogMJfnjfbzfZ1oYterCgGB6yQGro6rLf164VbzZEDsw",
+  "address": "CogMUfHjP4A9Lx6M94D6CCjEytxZuaB1uy1AaHQoq3KV",
   "metadata": {
     "name": "prediction_market",
     "version": "0.1.0",
@@ -354,66 +354,6 @@
           "type": "bool"
         }
       ]
-    },
-    {
-      "name": "sweep_funds",
-      "discriminator": [150, 235, 156, 105, 133, 142, 200, 162],
-      "accounts": [
-        {
-          "name": "config",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [99, 111, 110, 102, 105, 103]
-              }
-            ]
-          }
-        },
-        {
-          "name": "market",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [109, 97, 114, 107, 101, 116]
-              },
-              {
-                "kind": "account",
-                "path": "market.market_id",
-                "account": "Market"
-              }
-            ]
-          }
-        },
-        {
-          "name": "vault",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [118, 97, 117, 108, 116]
-              },
-              {
-                "kind": "account",
-                "path": "market.market_id",
-                "account": "Market"
-              }
-            ]
-          }
-        },
-        {
-          "name": "authority",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": []
     },
     {
       "name": "withdraw_fees",

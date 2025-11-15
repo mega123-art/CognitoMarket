@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
 
-declare_id!("CogMJfnjfbzfZ1oYterCgGB6yQGro6rLf164VbzZEDsw");
+declare_id!("CogMUfHjP4A9Lx6M94D6CCjEytxZuaB1uy1AaHQoq3KV");
 
 const MARKET_SEED: &[u8] = b"market";
 const VAULT_SEED: &[u8] = b"vault";
@@ -420,53 +420,7 @@ pub mod prediction_market {
         Ok(())
     }
 
-    pub fn sweep_funds(ctx: Context<SweepFunds>) -> Result<()> {
-        require!(
-            ctx.accounts.authority.key() == ctx.accounts.config.authority,
-            ErrorCode::Unauthorized
-        );
-
-        let market = &ctx.accounts.market;
-
-        require!(market.resolved, ErrorCode::MarketNotResolved);
-
-        let vault_balance = ctx.accounts.vault.lamports();
-        
-        require!(vault_balance > 0, ErrorCode::NoRemainingFunds);
-
-        let market_id_bytes = market.market_id.to_le_bytes();
-
-        let seeds = &[
-            VAULT_SEED,
-            market_id_bytes.as_ref(),
-            &[market.vault_bump],
-        ];
-        let signer = &[&seeds[..]];
-
-        let transfer_ix = anchor_lang::solana_program::system_instruction::transfer(
-            ctx.accounts.vault.key,
-            ctx.accounts.authority.key,
-            vault_balance,
-        );
-
-        anchor_lang::solana_program::program::invoke_signed(
-            &transfer_ix,
-            &[
-                ctx.accounts.vault.to_account_info(),
-                ctx.accounts.authority.to_account_info(),
-                ctx.accounts.system_program.to_account_info(),
-            ],
-            signer,
-        )?;
-
-        msg!(
-            "Authority swept {} lamports from market #{}", 
-            vault_balance, 
-            market.market_id
-        );
-
-        Ok(())
-    }
+    
 }
 
 // CORRECT FIX: Use UncheckedAccount and manually initialize in the function
@@ -653,33 +607,6 @@ pub struct WithdrawFees<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[derive(Accounts)]
-pub struct SweepFunds<'info> {
-    #[account(
-        seeds = [b"config"],
-        bump = config.bump
-    )]
-    pub config: Account<'info, Config>,
-
-    #[account(
-        seeds = [MARKET_SEED, market.market_id.to_le_bytes().as_ref()],
-        bump = market.bump
-    )]
-    pub market: Account<'info, Market>,
-
-    /// CHECK: Vault PDA validated by seeds
-    #[account(
-        mut,
-        seeds = [VAULT_SEED, market.market_id.to_le_bytes().as_ref()],
-        bump = market.vault_bump
-    )]
-    pub vault: UncheckedAccount<'info>,
-
-    #[account(mut)]
-    pub authority: Signer<'info>,
-
-    pub system_program: Program<'info, System>,
-}
 
 #[account]
 pub struct Config {
