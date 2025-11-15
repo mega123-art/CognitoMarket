@@ -16,7 +16,7 @@ const CONFIG_SEED = Buffer.from('config')
 const MARKET_SEED = Buffer.from('market')
 const VAULT_SEED = Buffer.from('vault')
 const USER_POSITION_SEED = Buffer.from('position')
-const FEE_VAULT_SEED = Buffer.from('fee_vault') // <-- FIX 1: Add FEE_VAULT_SEED
+const FEE_VAULT_SEED = Buffer.from('fee_vault')
 
 export function usePredictionMarket() {
   const { cluster } = useCluster()
@@ -28,7 +28,6 @@ export function usePredictionMarket() {
 
   // Find PDAs
   const [configPda] = PublicKey.findProgramAddressSync([CONFIG_SEED], program.programId)
-  // <-- FIX 2: Add feeVaultPda derivation -->
   const [feeVaultPda] = PublicKey.findProgramAddressSync([FEE_VAULT_SEED], program.programId)
 
   const findMarketPDAs = (marketId: BN) => {
@@ -49,7 +48,7 @@ export function usePredictionMarket() {
 
   // === QUERIES ===
 
-  // Get all markets (THIS IS THE MISSING PIECE)
+  // Get all markets
   const getMarkets = useQuery({
     queryKey: ['prediction-market', 'all-markets', { cluster }],
     // @ts-expect-error Anchor IDL type inference issue
@@ -72,7 +71,6 @@ export function usePredictionMarket() {
       queryKey: ['prediction-market', 'market', marketPubkey?.toString(), { cluster }],
       queryFn: () => {
         if (!marketPubkey) throw new Error('Market pubkey not provided')
-        // MODIFIED: Placed the ts-expect-error directive directly above the line causing the error
         // @ts-expect-error Anchor IDL type inference issue
         return program.account.market.fetch(marketPubkey)
       },
@@ -114,33 +112,26 @@ export function usePredictionMarket() {
       const { vaultPda } = findMarketPDAs(marketId)
       const userPositionPda = findUserPositionPDA(marketId, publicKey)
 
-      // Config account is still needed for its bump seeds, but not authority
-      // @ts-expect-error Anchor IDL type inference issue
-      const config = await program.account.config.fetch(configPda)
-
       const signature = await program.methods
         .buyShares(input.isYes, input.amountLamports, input.minSharesOut)
         .accounts({
           config: configPda,
-          market: input.marketPubkey, // Use the actual pubkey, not derived PDA
+          market: input.marketPubkey,
           vault: vaultPda,
-          feeVault: feeVaultPda, // <-- FIX 3: Add feeVault
+          feeVault: feeVaultPda,
           userPosition: userPositionPda,
           user: publicKey,
-          // authority: config.authority, // <-- FIX 4: Remove authority
           systemProgram: SystemProgram.programId,
         })
         .rpc()
 
-      // Return both signature and marketPubkey for cache invalidation
-      // MODIFIED: Also return 'isYes' to trigger the correct floating element
+      // Return signature, marketPubkey, and isYes for cache invalidation and effects
       return { signature, marketPubkey: input.marketPubkey.toString(), isYes: input.isYes }
     },
     onSuccess: ({ signature, marketPubkey, isYes }) => {
-      // MODIFIED: Destructure isYes
       transactionToast(signature)
 
-      // MODIFIED: Dispatch custom event to trigger floating element
+      // Dispatch custom event to trigger floating element
       const event = new CustomEvent('newBuy', {
         detail: { type: isYes ? 'yes' : 'no' },
       })
@@ -169,7 +160,7 @@ export function usePredictionMarket() {
       const userPositionPda = findUserPositionPDA(input.marketId, publicKey)
 
       const signature = await program.methods
-        .claimWinnings() // <-- FIX 5: Remove marketId argument
+        .claimWinnings()
         .accounts({
           market: marketPda,
           vault: vaultPda,
@@ -193,7 +184,7 @@ export function usePredictionMarket() {
 
   return {
     program,
-    getMarkets, // <-- FIX 6: Ensure getMarkets is returned
+    getMarkets,
     useGetMarket,
     useGetMarketByPubkey,
     getUserPositions,

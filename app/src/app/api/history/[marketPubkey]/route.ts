@@ -14,17 +14,18 @@ let cachedClient: MongoClient | null = null
 
 async function connectToDatabase() {
   if (cachedClient) {
-    return cachedClient.db('prediction_market_again') // Use your DB name
+    return cachedClient.db('prediction_market_again')
   }
 
   const client = await MongoClient.connect(process.env.MONGO_URI!)
   cachedClient = client
-  return client.db('prediction_market_again') // Use your DB name
+  return client.db('prediction_market_again')
 }
 
-// FIX: Use the standard destructuring pattern in the signature
-export async function GET(request: Request, { params }: { params: { marketPubkey: string } }) {
-  const { marketPubkey } = params // This is the syntax Next.js requires
+// FIX: In Next.js 15, params is a Promise that must be awaited
+export async function GET(request: Request, { params }: { params: Promise<{ marketPubkey: string }> }) {
+  // Await the params promise to get the resolved object
+  const { marketPubkey } = await params
 
   if (!marketPubkey) {
     return NextResponse.json({ error: 'Market Pubkey is required' }, { status: 400 })
