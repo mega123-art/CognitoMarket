@@ -93,7 +93,7 @@ export function MarketDetailFeature({ marketId }: { marketId: string }) {
           <CardContent className="space-y-4">
             {/* MODIFIED: Added Chart Component AND removed marketPubkey prop */}
             <div className="h-64">
-              <MarketPriceChart />
+              <MarketPriceChart marketPubkey={marketPubkey} />
             </div>
             <div className="flex justify-between font-mono">
               <span className="text-muted-foreground">YES Price</span>

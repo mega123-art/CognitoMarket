@@ -1,107 +1,92 @@
+// app/src/components/prediction-market/market-price-chart.tsx
 'use client'
 
-import { Card } from '@/components/ui/card'
 import React from 'react'
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-// We are not importing TooltipProps to avoid type conflicts
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { useQuery } from '@tanstack/react-query'
+import { PublicKey } from '@solana/web3.js'
 
-// MODIFIED: Define a specific type for the tooltip payload
-type TooltipPayload = {
-  value: number
-}
-
-// Custom Tooltip with Neobrutalism Style
-// MODIFIED: Replaced `any[]` with our specific `TooltipPayload[]`
-const CustomTooltip = ({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean
-  payload?: TooltipPayload[]
-  label?: string | number
-}) => {
-  if (active && payload?.length) {
-    return (
-      <Card className="bg-background border-2 border-foreground shadow-[4px_4px_0px_var(--border)] p-2">
-        <p className="font-mono font-bold">{`Time: ${label}`}</p>
-        <p className="font-mono text-primary">{`YES: ${payload[0].value}¢`}</p>
-        <p className="font-mono text-destructive">{`NO: ${payload[1].value}¢`}</p>
-      </Card>
-    )
-  }
-  return null
-}
-
-// Define a type for the historical data
+// Define the structure of our history data
 type PriceHistoryPoint = {
-  timestamp: number
+  timestamp: string // It's now a simple string, not an object
   yes_liquidity: string
   no_liquidity: string
 }
 
-/**
- * --- STATIC CHART DATA ---
- * We are now serving a hard-coded array of market history
- * directly in this component to ensure it always works.
- */
-const staticHistoryData: PriceHistoryPoint[] = [
-  {
-    timestamp: 1704067200, // Jan 1, 2024
-    yes_liquidity: '100000000', // 0.1 SOL
-    no_liquidity: '100000000', // 0.1 SOL
-  },
-  {
-    timestamp: 1704153600, // Jan 2, 2024
-    yes_liquidity: '120000000',
-    no_liquidity: '90000000',
-  },
-  {
-    timestamp: 1704240000, // Jan 3, 2024
-    yes_liquidity: '150000000',
-    no_liquidity: '80000000',
-  },
-  {
-    timestamp: 1704326400, // Jan 4, 2024
-    yes_liquidity: '130000000',
-    no_liquidity: '110000000',
-  },
-  {
-    timestamp: 1704412800, // Jan 5, 2024
-    yes_liquidity: '180000000',
-    no_liquidity: '100000000',
-  },
-  {
-    timestamp: 1704499200, // Jan 6, 2024
-    yes_liquidity: '250000000',
-    no_liquidity: '100000000',
-  },
-  {
-    timestamp: 1704585600, // Jan 7, 2024
-    yes_liquidity: '220000000',
-    no_liquidity: '150000000',
-  },
-]
+// Define the structure of the data our chart needs
+type ChartDataPoint = {
+  time: string
+  price: number
+}
 
-// Helper to calculate price and format time
-function formatData(data: PriceHistoryPoint[]) {
-  return data.map((item) => {
-    const yesLiq = BigInt(item.yes_liquidity)
-    const noLiq = BigInt(item.no_liquidity)
-    const totalLiq = yesLiq + noLiq
+// Helper to fetch data from our new API route
+async function fetchMarketHistory(marketPubkey: string): Promise<PriceHistoryPoint[]> {
+  const res = await fetch(`/api/history/${marketPubkey}`)
+  if (!res.ok) {
+    throw new Error('Failed to fetch market history')
+  }
+  return res.json()
+}
 
-    // Calculate price as a percentage (0-100)
-    const yesPrice = totalLiq > 0n ? Number((yesLiq * 100n) / totalLiq) : 50
-    const noPrice = 100 - yesPrice
-    // Format time to be readable
-    const time = new Date(item.timestamp * 1000).toLocaleTimeString()
+// Helper to format the raw Mongo data for the chart
+function formatData(data: PriceHistoryPoint[]): ChartDataPoint[] {
+  return data.map((point) => {
+    // Convert string liquidity to numbers
+    const yes = BigInt(point.yes_liquidity)
+    const no = BigInt(point.no_liquidity)
 
-    return { time, yesPrice, noPrice }
+    // Calculate price: yes / (yes + no)
+    const price = Number((yes * 10000n) / (yes + no)) / 10000
+
+    return {
+      // Use the timestamp string directly
+      time: new Date(point.timestamp).toLocaleTimeString(),
+      price: price,
+    }
   })
 }
 
-export function MarketPriceChart() {
-  const chartData = React.useMemo(() => formatData(staticHistoryData), [])
+// Accept the market's PublicKey as a prop
+export function MarketPriceChart({ marketPubkey }: { marketPubkey: PublicKey }) {
+  // Use react-query to fetch and auto-refresh the data
+const { data: historyData, isLoading } = useQuery({
+  // 1. This is the fix:
+  // We use a ternary operator. If marketPubkey exists, use its string.
+  // If not, use 'null'. This prevents the .toString() error.
+  queryKey: ['market-history', marketPubkey ? marketPubkey.toString() : null],
+
+  // 2. The queryFn is also safer, though `enabled` should prevent it from running.
+  queryFn: () => {
+    if (!marketPubkey) return null
+    return fetchMarketHistory(marketPubkey.toString())
+  },
+
+  // This is the magic: refetch every 5 seconds!
+  refetchInterval: 5000,
+  enabled: !!marketPubkey, // This is still correct and important
+})
+
+  // Memoize the formatted data so we don't recalculate on every render
+  const chartData = React.useMemo(() => {
+    if (!historyData) return []
+    return formatData(historyData)
+  }, [historyData])
+
+  if (isLoading) {
+    return (
+      <div className="h-64 w-full flex items-center justify-center">
+        <p>Loading chart data...</p>
+      </div>
+    )
+  }
+
+  if (!chartData || chartData.length === 0) {
+    return (
+      <div className="h-64 w-full flex items-center justify-center">
+        <p>No trading data available for this market yet.</p>
+      </div>
+    )
+  }
 
   return (
     <div className="h-64 w-full">
@@ -110,60 +95,36 @@ export function MarketPriceChart() {
           data={chartData}
           margin={{
             top: 5,
-            right: 10,
-            left: -20,
+            right: 20,
+            left: -20, // Move Y-axis labels closer
             bottom: 5,
           }}
         >
-          <XAxis
-            dataKey="time"
-            stroke="var(--foreground)"
-            tick={{
-              fill: 'var(--muted-foreground)',
-              fontSize: 12,
-              fontFamily: 'var(--font-geist-mono)',
-            }}
-            tickLine={{ stroke: 'var(--foreground)' }}
-            axisLine={{ stroke: 'var(--foreground)', strokeWidth: 2 }}
-          />
+          <XAxis dataKey="time" fontSize={12} tickLine={false} axisLine={false} />
           <YAxis
-            stroke="var(--foreground)"
-            tick={{
-              fill: 'var(--muted-foreground)',
-              fontSize: 12,
-              fontFamily: 'var(--font-geist-mono)',
-            }}
-            tickFormatter={(value) => `${value}¢`}
-            domain={[0, 100]}
-            tickLine={{ stroke: 'var(--foreground)' }}
-            axisLine={{ stroke: 'var(--foreground)', strokeWidth: 2 }}
+            fontSize={12}
+            tickLine={false}
+            axisLine={false}
+            domain={[0, 1]} // Price is always between 0 and 1
+            tickFormatter={(value) => `$${value.toFixed(2)}`}
           />
-          <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'var(--foreground)', strokeWidth: 2 }} />
-          <Line
-            type="monotone"
-            dataKey="yesPrice"
-            stroke="var(--primary)"
-            strokeWidth={3}
-            dot={false}
-            activeDot={{
-              stroke: 'var(--background)',
-              strokeWidth: 2,
-              r: 6,
-              fill: 'var(--primary)',
+          <Tooltip
+            contentStyle={{
+              backgroundColor: 'hsl(var(--background))',
+              borderColor: 'hsl(var(--border))',
+              borderRadius: '0.5rem',
             }}
+            labelStyle={{ color: 'hsl(var(--foreground))' }}
+            itemStyle={{ color: 'hsl(var(--foreground))' }}
+            formatter={(value: number) => [value.toFixed(4), 'Price']}
           />
           <Line
             type="monotone"
-            dataKey="noPrice"
-            stroke="var(--destructive)"
-            strokeWidth={3}
+            dataKey="price"
+            stroke="hsl(var(--primary))"
+            strokeWidth={2}
             dot={false}
-            activeDot={{
-              stroke: 'var(--background)',
-              strokeWidth: 2,
-              r: 6,
-              fill: 'var(--destructive)',
-            }}
+            activeDot={{ r: 6 }}
           />
         </LineChart>
       </ResponsiveContainer>
