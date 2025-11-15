@@ -22,16 +22,9 @@ async function connectToDatabase() {
   return client.db('prediction_market_again') // Use your DB name
 }
 
-// --- FIX: Define an explicit interface for the context object ---
-interface RouteContext {
-  params: {
-    marketPubkey: string
-  }
-}
-
-// We use the explicit interface for the second argument
-export async function GET(request: Request, context: RouteContext) {
-  const marketPubkey = context.params.marketPubkey
+// FIX: Use the standard destructuring pattern in the signature
+export async function GET(request: Request, { params }: { params: { marketPubkey: string } }) {
+  const { marketPubkey } = params // This is the syntax Next.js requires
 
   if (!marketPubkey) {
     return NextResponse.json({ error: 'Market Pubkey is required' }, { status: 400 })
