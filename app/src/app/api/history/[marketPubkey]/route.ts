@@ -14,12 +14,14 @@ let cachedClient: MongoClient | null = null
 
 async function connectToDatabase() {
   if (cachedClient) {
-    return cachedClient.db('prediction_market_again')
+    // UPDATED: Point to the correct database
+    return cachedClient.db('prediction_market_no')
   }
 
   const client = await MongoClient.connect(process.env.MONGO_URI!)
   cachedClient = client
-  return client.db('prediction_market_nosweep')
+  // UPDATED: Point to the correct database
+  return client.db('prediction_market_no')
 }
 
 // FIX: In Next.js 15, params is a Promise that must be awaited
