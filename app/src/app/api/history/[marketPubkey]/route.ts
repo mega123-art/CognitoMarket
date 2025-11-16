@@ -40,8 +40,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ mark
     const historyData = await historyCollection
       .find(
         { market_pubkey: marketPubkey },
-        // Projection: only get the fields we need
-        { projection: { _id: 0, yes_liquidity: 1, no_liquidity: 1, timestamp: 1 } },
+        // MODIFICATION: Update projection to include trade details
+        {
+          projection: {
+            _id: 0,
+            yes_liquidity: 1,
+            no_liquidity: 1,
+            timestamp: 1,
+            is_yes: 1, // <-- ADDED
+            shares: 1, // <-- ADDED
+            tx_signature: 1, // <-- ADDED (for a unique key)
+          },
+        },
       )
       .sort({ timestamp: 1 }) // Sort by timestamp ascending
       .toArray()

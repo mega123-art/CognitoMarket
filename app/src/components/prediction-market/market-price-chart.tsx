@@ -3,28 +3,29 @@
 
 import React from 'react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { useQuery } from '@tanstack/react-query'
-import { PublicKey } from '@solana/web3.js'
 import { Card } from '@/components/ui/card'
 
 // --- 1. Define Data Structures for Real-Time Data ---
 
-// Define the structure of our history data returned from your API route
-type PriceHistoryPoint = {
+// MODIFICATION: Export PriceHistoryPoint so parent component can use it
+export type PriceHistoryPoint = {
   timestamp: string
   yes_liquidity: string
   no_liquidity: string
+  is_yes: boolean // <-- ADDED
+  shares: string // <-- ADDED (as string from Mongo)
+  tx_signature: string // <-- ADDED
 }
 
-// Define the structure of the data our chart needs (0-1 price scale)
-type ChartDataPoint = {
+// MODIFICATION: Export ChartDataPoint so parent component can use it
+export type ChartDataPoint = {
   time: string
   yesPrice: number
   noPrice: number
 }
 
-// Helper to fetch data from your new Next.js API route
-async function fetchMarketHistory(marketPubkey: string): Promise<PriceHistoryPoint[]> {
+// MODIFICATION: Export fetchMarketHistory helper
+export async function fetchMarketHistory(marketPubkey: string): Promise<PriceHistoryPoint[]> {
   const res = await fetch(`/api/history/${marketPubkey}`)
   if (!res.ok) {
     // If the API fails, log the error but return an empty array
@@ -34,8 +35,8 @@ async function fetchMarketHistory(marketPubkey: string): Promise<PriceHistoryPoi
   return res.json()
 }
 
-// Helper to format the raw Mongo data for the chart
-function formatData(data: PriceHistoryPoint[]): ChartDataPoint[] {
+// MODIFICATION: Export formatData helper
+export function formatData(data: PriceHistoryPoint[]): ChartDataPoint[] {
   return data.map((point) => {
     // Convert string liquidity (from Mongo) to BigInt for math precision
     const yesLiq = BigInt(point.yes_liquidity)
@@ -91,27 +92,11 @@ const CustomTooltip = ({
 
 // --- 3. Main Component ---
 
-// Accept the market's PublicKey as a prop
-export function MarketPriceChart({ marketPubkey }: { marketPubkey: PublicKey | null }) {
-  // Use react-query to fetch and auto-refresh the data
-  const { data: historyData, isLoading } = useQuery({
-    queryKey: ['market-history', marketPubkey ? marketPubkey.toString() : null],
-    queryFn: () => {
-      if (!marketPubkey) return null
-      return fetchMarketHistory(marketPubkey.toString())
-    },
-    // Refetch every 5 seconds for near real-time updates
-    refetchInterval: 5000,
-    enabled: !!marketPubkey,
-  })
+// MODIFICATION: Change props to accept prepared data
+export function MarketPriceChart({ chartData, isLoading }: { chartData: ChartDataPoint[]; isLoading: boolean }) {
+  // MODIFICATION: Removed useQuery and useMemo (lifted to parent)
 
-  // Memoize the formatted data
-  const chartData = React.useMemo(() => {
-    if (!historyData) return []
-    return formatData(historyData)
-  }, [historyData])
-
-  if (isLoading || !marketPubkey) {
+  if (isLoading) {
     return (
       <div className="h-64 w-full flex items-center justify-center">
         <p>Loading chart data...</p>
