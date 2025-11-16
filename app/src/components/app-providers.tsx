@@ -7,13 +7,17 @@ import { SolanaProvider } from './solana/solana-provider'
 import { Toaster } from '@/components/ui/sonner'
 import { FloatingBuyElements } from './floating-buy-elements'
 import { ConfettiEffect } from './confetti-effect'
-import { ClusterProvider } from './cluster/cluster-data-access' // MODIFIED: Import ClusterProvider
+import { ClusterProvider } from './cluster/cluster-data-access'
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="light"
+      enableSystem={false} // <-- MODIFIED
+      disableTransitionOnChange
+    >
       <ReactQueryProvider>
-        {/* MODIFIED: Wrap SolanaProvider with ClusterProvider */}
         <ClusterProvider>
           <SolanaProvider>
             {children}
