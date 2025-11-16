@@ -80,33 +80,40 @@
   --sidebar-ring: #00FFFF;
 }
 
+/* === MODIFIED DARK THEME (HEX CODES) === */
 .dark {
   --radius: 0rem;
-  --background: #2A002A; /* Dark Purple */
-  --foreground: #FF00FF; /* Magenta */
-  --card: #000000; /* Black cards */
-  --card-foreground: #FF00FF; /* Magenta text on cards */
+  --background: #000000; /* Pitch Black */
+  --foreground: #FFFF00; /* Bright Yellow */
+  --card: #0D0D0D; /* Near Black */
+  --card-foreground: #FFFF00; /* Bright Yellow */
   --popover: #000000;
-  --popover-foreground: #FF00FF;
-  --primary: #00FFFF; /* Cyan */
+  --popover-foreground: #FFFF00;
+  
+  --primary: #00FFFF; /* Cyan (YES) */
   --primary-foreground: #000000; /* Black */
-  --secondary: #171717;
-  --secondary-foreground: #FF00FF;
-  --muted: #171717;
-  --muted-foreground: #a3a3a3;
-  --accent: #171717;
-  --accent-foreground: #FF00FF;
-  --destructive: #FFFF00; /* Bright Yellow */
+  
+  --destructive: #FF00FF; /* Magenta (NO) */
   --destructive-foreground: #000000; /* Black */
-  --border: #FF00FF; /* Magenta borders */
-  --input: #FF00FF;
-  --ring: #00FFFF; /* Cyan */
+  
+  --secondary: #1A1A1A;
+  --secondary-foreground: #FFFF00;
+  
+  --muted: #1A1A1A;
+  --muted-foreground: #00FF00; /* Muted Electric Green */
+  
+  --accent: #1A1A1A;
+  --accent-foreground: #FFFF00;
+  
+  --border: #00FF00; /* Electric Green borders */
+  --input: #00FF00;
+  --ring: #FF00FF; /* Magenta */
 
   /* Unused charts */
   --chart-1: #00FFFF;
   --chart-2: #00FFFF;
   --chart-3: #00FFFF;
-  --chart-4: #00FFFF;
+  --chart-4: #0LFFFF;
   --chart-5: #00FFFF;
   --sidebar: #000000;
   --sidebar-foreground: #FF00FF;
@@ -117,6 +124,8 @@
   --sidebar-border: #FF00FF;
   --sidebar-ring: #00FFFF;
 }
+/* === END MODIFIED DARK THEME === */
+
 
 @layer base {
   * {
