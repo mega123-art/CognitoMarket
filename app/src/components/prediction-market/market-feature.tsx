@@ -9,6 +9,7 @@ import { AppHero } from '../app-hero'
 import { LAMPORTS_PER_SOL } from '@solana/web3.js'
 import { Key, useMemo } from 'react' // MODIFIED: Import useMemo
 import { cn } from '@/lib/utils' // Import cn utility
+import { MarketCardSkeleton } from './market-card-skeleton'
 
 // Helper to calculate price
 function getPrice(yesLiquidity: bigint, noLiquidity: bigint): number {
@@ -60,7 +61,18 @@ export function MarketFeature() {
     <div>
       {/* MODIFIED: Pass plain strings. AppHero now handles styling. */}
       <AppHero title="Cognito Market" subtitle="AI Based Decentralized Prediction Markets" />
-      {getMarkets.isLoading && <div>Loading markets...</div>}
+      {getMarkets.isLoading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <MarketCardSkeleton />
+          <MarketCardSkeleton />
+          <MarketCardSkeleton />
+          <MarketCardSkeleton />
+          <MarketCardSkeleton />
+          <MarketCardSkeleton /> 
+          <MarketCardSkeleton />
+          <MarketCardSkeleton />
+        </div>
+      )}
       {getMarkets.isError && <div className="alert alert-error">Error loading markets: {getMarkets.error.message}</div>}
 
       {/* MODIFIED: Increased gap for brutalist layout */}

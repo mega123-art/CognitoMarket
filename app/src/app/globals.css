@@ -295,3 +295,33 @@
 
 
 
+.skeleton-block {
+  /* Override global 'animation: none' */
+  animation: brutal-flash 1s steps(1, end) infinite !important;
+  background-color: var(--accent);
+  opacity: 0.5;
+  height: 1rem; /* Default height, can be overridden by h-4, etc. */
+}
+
+@keyframes brutal-flash {
+  0% {
+    background-color: var(--accent);
+    opacity: 0.4;
+  }
+  25% {
+    background-color: var(--primary);
+    opacity: 0.6;
+  }
+  50% {
+    background-color: var(--accent);
+    opacity: 0.4;
+  }
+  75% {
+    background-color: var(--destructive);
+    opacity: 0.6;
+  }
+  100% {
+    background-color: var(--accent);
+    opacity: 0.4;
+  }
+}
